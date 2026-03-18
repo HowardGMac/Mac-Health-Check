@@ -2,8 +2,9 @@
 
 ## CHANGELOG
 
-### 3.1.1b1 (04-Mar-2026)
-- Hardened Jamf Pro inventory submission to only send `-endUsername` when a valid SSO username is available, preventing `"NOT logged in"` placeholder values from being submitted in non-PSSO environments, and added explicit inventory notices that log whether `-endUsername` was used plus its source (Kerberos SSOe, Platform SSOe, or None) and resolved value (`<empty>` when not used) in a single line (Issue #81; sorry for any Dan-induced headaches, @tonyyo11!)
+Version 3.2.0b1, 17-Mar-2026, Dan K. Snelson (@dan-snelson)
+- Hardened Jamf Pro inventory submission to only send `-endUsername` when a valid SSO username is available, preventing `"NOT logged in"` placeholder values from being submitted in non-PSSO environments, and added explicit inventory notices that log whether `-endUsername` was used plus its source (Kerberos SSOe, Platform SSOe, or None) and resolved value (`<empty>` when not used). Issue #81; sorry for any Dan-induced headaches, @tonyyo11!
+- Refactored `checkOS()` to better handle beta versions vs. Background Security Improvement versions
 
 ### 3.1.0 (03-Mar-2026)
 - Refactored code to more reliably display `$humanReadableScriptName` in the Dock

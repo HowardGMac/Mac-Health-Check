@@ -17,12 +17,13 @@
 #
 # HISTORY
 #
-# Version 3.1.1b1, 04-Mar-2026, Dan K. Snelson (@dan-snelson)
+# Version 3.2.0b1, 17-Mar-2026, Dan K. Snelson (@dan-snelson)
 #   - Hardened Jamf Pro inventory submission to only send `-endUsername` when a valid SSO username
 #     is available, preventing `"NOT logged in"` placeholder values from being submitted in non-PSSO
 #     environments, and added explicit inventory notices that log whether `-endUsername` was used
 #     plus its source (Kerberos SSOe, Platform SSOe, or None) and resolved value (`<empty>` when not used).
 #     Issue #81; sorry for any Dan-induced headaches, @tonyyo11!
+#   - Refactored `checkOS()` to better handle beta versions vs. Background Security Improvement versions
 #
 ####################################################################################################
 
@@ -37,7 +38,7 @@
 export PATH=/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin/
 
 # Script Version
-scriptVersion="3.1.1b1"
+scriptVersion="3.2.0b1"
 
 # Client-side Log
 scriptLog="/var/log/org.churchofjesuschrist.log"
@@ -2032,16 +2033,25 @@ function checkOS() {
 
     sleep "${anticipationDuration}"
 
-    if [[ "${osBuild}" =~ [a-zA-Z]$ ]]; then
+    # Check if this is a beta build vs. a Background Security Improvement (BSI) release
+    # Beta builds: osVersionExtra is empty AND osBuild ends with a letter (e.g., "25D771280a" with no ProductVersionExtra)
+    # BSI releases: osVersionExtra is populated (e.g., "(a)") AND osBuild ends with a letter (e.g., "25D771280a")
+    # BSI releases are production versions and should proceed through normal SOFA compliance checking
 
-        logComment "OS Build, ${osBuild}, ends with a letter; skipping"
+    if [[ -z "${osVersionExtra}" ]] && [[ "${osBuild}" =~ [a-zA-Z]$ ]]; then
+
+        logComment "OS Build, ${osBuild}, ends with a letter and ProductVersionExtra is empty; treating as beta"
         osResult="Beta macOS ${osVersion} (${osBuild})"
         dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=#F8D84A, iconalpha: 1, subtitle: Beta builds of macOS are purposely marked as unsupported, status: error, statustext: ${osResult}"
         warning "${osResult}"
     
     else
 
-        logComment "OS Build, ${osBuild}, ends with a number; proceeding …"
+        if [[ -n "${osVersionExtra}" ]]; then
+            logComment "OS Build, ${osBuild}, is a Background Security Improvement release (ProductVersionExtra: ${osVersionExtra}); proceeding with SOFA compliance check …"
+        else
+            logComment "OS Build, ${osBuild}, ends with a number; proceeding with SOFA compliance check …"
+        fi
 
         # N-rule variable [How many previous minor OS path versions will be marked as compliant]
         n="${previousMinorOS}"
@@ -4112,7 +4122,7 @@ if [[ "${operationMode}" == "Development" ]]; then
 
     developmentListitemJSON='
     [
-        {"title" : "Computer Inventory", "subtitle" : "The listing of your Mac’s apps and settings", "icon" : "SF=37.circle,'"${organizationColorScheme}"'", "status" : "pending", "statustext" : "Pending …", "iconalpha" : 0.5}
+        {"title" : "macOS Version", "subtitle" : "Organizational standards are the current and immediately previous versions of macOS", "icon" : "SF=01.circle,'"${organizationColorScheme}"'", "status" : "pending", "statustext" : "Pending …", "iconalpha" : 0.5}
     ]
     '
     # Validate developmentListitemJSON is valid JSON
@@ -4252,7 +4262,7 @@ if [[ "${operationMode}" == "Development" ]]; then
     notice "Operation Mode is ${operationMode}; using ${operationMode}-specific Health Check."
     dialogUpdate "title: ${humanReadableScriptName} (${scriptVersion})<br>Operation Mode: ${operationMode}"
     set -x
-    updateComputerInventory "0"
+    checkOS "0"
     set +x
 
 else
