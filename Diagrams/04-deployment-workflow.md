@@ -1,6 +1,6 @@
 # Mac Health Check: Deployment Workflow
 
-This diagram provides a step-by-step guide for administrators deploying Mac Health Check through their MDM solution. Follow the phases in order for a successful deployment.
+This diagram provides a step-by-step guide for deploying the `3.2.0` release of Mac Health Check through an MDM solution. Follow the phases in order for a successful deployment.
 
 ```mermaid
 graph TB
@@ -8,7 +8,7 @@ graph TB
 
     subgraph Phase1["Phase 1: Prerequisites"]
         P1A["Confirm MDM solution<br>Jamf Pro · Kandji · Intune · Mosyle<br>JumpCloud · Addigy · Filewave · Fleet"]
-        P1B["Confirm swiftDialog license<br>github.com/swiftDialog/swiftDialog"]
+        P1B["Confirm prerequisites<br>jq present; swiftDialog<br>preinstalled or installable"]
         P1C["Download Mac-Health-Check.zsh<br>from GitHub repository"]
 
         START --> P1A
@@ -21,10 +21,10 @@ graph TB
     end
 
     subgraph Phase2["Phase 2: Script Customization"]
-        P2A["Edit Organization Defaults<br>(lines 90–172)"]
-        P2B["Set branding<br>organizationBrandingBannerURL<br>organizationOverlayiconURL<br>dockIcon"]
+        P2A["Edit Organization + Support Defaults<br>(branding, Dock, thresholds, contacts)"]
+        P2B["Set branding and Dock behavior<br>organizationBrandingBannerURL<br>organizationOverlayiconURL<br>enableDockIntegration · dockIcon"]
         P2C["Set operational thresholds<br>vpnClientVendor · organizationFirewall<br>allowedUptimeMinutes<br>allowedMinimumFreeDiskPercentage"]
-        P2D["Set webhook URL (optional)<br>Microsoft Teams or Slack"]
+        P2D["Set support links and labels<br>supportTeam* or supportLabelN/valueN"]
 
         P1C --> P2A
         P2A --> P2B
@@ -111,10 +111,10 @@ graph TB
 
     subgraph Phase7["Phase 7: Testing"]
         P7A["Run in Debug mode<br>Parameter 4 = 'Debug'<br>Review set -x output"]
-        P7B["Run in Development mode<br>Parameter 4 = 'Development'<br>Test individual checks"]
-        P7C["Run in Test mode<br>Parameter 4 = 'Test'<br>Validate UI with simulated results"]
+        P7B["Run in Development mode<br>Parameter 4 = 'Development'<br>Exercise curated dev subset"]
+        P7C["Run in Test mode<br>Parameter 4 = 'Test'<br>Validate full vendor UI with simulated success"]
         P7D{"All checks<br>render correctly?"}
-        P7FIX["Review Organization Defaults<br>and re-test"]
+        P7FIX["Review configuration<br>and re-test"]
 
         P6C --> P7A
         P6SKIP2 --> P7A
@@ -134,18 +134,21 @@ graph TB
 
     subgraph Phase8["Phase 8: Production &amp; Monitoring"]
         P8["Promote to production scope"]
-        P8A["Monitor /var/log/ entries<br>Review structured log output"]
+        P8A["Monitor /var/log/org.churchofjesuschrist.log<br>Review structured log output"]
         P8B["Review webhook alerts<br>(if configured)"]
-        P8C["Check MDM inventory<br>for compliance trends"]
+        P8C["Validate Dock badge and failure notification<br>on unhealthy non-Silent runs"]
+        P8D["Check MDM inventory<br>for compliance trends"]
 
         P8 --> P8A
         P8 --> P8B
         P8 --> P8C
+        P8 --> P8D
 
         style P8 fill:#c8e6c9
         style P8A fill:#c8e6c9
         style P8B fill:#c8e6c9
         style P8C fill:#c8e6c9
+        style P8D fill:#c8e6c9
     end
 
     classDef default font-size:11px
@@ -160,23 +163,25 @@ graph TB
 Before deploying Mac Health Check, confirm:
 
 - [ ] An MDM solution is in place (Jamf Pro, Kandji, Microsoft Intune, Mosyle, JumpCloud, Addigy, Filewave, or Fleet)
-- [ ] A [swiftDialog license](https://github.com/swiftDialog/swiftDialog) is available for your organization
+- [ ] `jq` is present on target Macs
+- [ ] `swiftDialog` is approved for your environment and is either preinstalled or allowed to auto-install/update
 - [ ] You have downloaded the latest `Mac-Health-Check.zsh` from the [GitHub repository](https://github.com/dan-snelson/Mac-Health-Check)
 
 ---
 
 ### Phase 2: Script Customization
 
-Open `Mac-Health-Check.zsh` and edit the **Organization Variables** section (lines 90–172).
+Open `Mac-Health-Check.zsh` and review the **Organization Variables** and **IT Support Variables** sections.
 
 **Required changes:**
 | Variable | What to Set |
 |---|---|
 | `organizationBrandingBannerURL` | Your organization's banner image URL |
 | `organizationOverlayiconURL` | Your MDM self-service app icon path or URL |
-| `dockIcon` | Your MDM self-service icon URL (for Dock badge) |
+| `enableDockIntegration` / `dockIcon` | Whether to show Dock integration in non-`Silent` modes and which icon to use |
 | `vpnClientVendor` | `paloalto`, `cisco`, `tailscale`, or `none` |
 | `organizationFirewall` | `socketfilterfw` (most orgs) or `pf` |
+| `supportLabel1` / `supportValue1` (and additional pairs as needed) | Dynamic support lines and the first URL-like action for the Info button |
 
 **Optional changes:**
 | Variable | Default | Description |
@@ -185,7 +190,8 @@ Open `Mac-Health-Check.zsh` and edit the **Organization Variables** section (lin
 | `allowedMinimumFreeDiskPercentage` | `10` | Free disk error threshold |
 | `previousMinorOS` | `2` | How many older macOS versions are compliant |
 | `completionTimer` | `60` | Dialog auto-close (seconds) |
-| `webhookURL` | (blank) | Teams or Slack webhook URL for failures |
+
+`webhookURL` is configured as **Parameter 5** in the MDM policy, not as a long-lived script default.
 
 ---
 
@@ -235,8 +241,8 @@ Use the three developer-oriented modes to validate behavior before rolling out t
 | Mode | Purpose | How to Use |
 |---|---|---|
 | `Debug` | Shell tracing (`set -x`) for troubleshooting | Run policy and review MDM logs |
-| `Development` | Run a single health check in isolation | Set Parameter 4 to `Development` |
-| `Test` | Full run with simulated (non-real) check results | Validate UI layout and messages |
+| `Development` | Exercise the curated development check subset | Set Parameter 4 to `Development` |
+| `Test` | Build the full current vendor list and mark each item successful without running the real checks | Validate UI layout and messages |
 
 ---
 
@@ -244,7 +250,8 @@ Use the three developer-oriented modes to validate behavior before rolling out t
 
 After production deployment, monitor:
 
-- **Client logs** at `/var/log/` on managed Macs — look for `[WARNING]` and `[ERROR]` entries
+- **Client logs** at `/var/log/org.churchofjesuschrist.log` on managed Macs — look for `[WARNING]` and `[ERROR]` entries
+- **Dock badge and persistent failure notifications** on test Macs in non-`Silent` modes — confirm countdown badges update per check and failed runs show the `3.2.0` pseudo-alert summary and support action
 - **Webhook notifications** in Teams or Slack (if configured) — review failure summaries
 - **MDM inventory** — for Jamf Pro, each run can trigger a recon; use Smart Group criteria based on extension attributes for fleet-wide compliance visibility
 
@@ -252,11 +259,12 @@ After production deployment, monitor:
 
 ## Deployment Checklist
 
-- [ ] Organization Defaults customized (branding, VPN, firewall, thresholds)
+- [ ] Organization and support defaults customized (branding, Dock, VPN, firewall, thresholds, contact links)
 - [ ] External check scripts uploaded and triggers configured (if applicable)
 - [ ] Script uploaded to MDM with correct parameters
 - [ ] Self Service policy created, scoped, and published
 - [ ] Tested in Debug mode — no fatal errors
+- [ ] Tested in Development mode — curated subset behaves as expected
 - [ ] Tested in Test mode — UI renders correctly
 - [ ] Silent mode policy created (if desired)
 - [ ] Webhook validated (if configured)

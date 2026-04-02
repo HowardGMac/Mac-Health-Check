@@ -1,10 +1,10 @@
 ![GitHub release (latest by date)](https://img.shields.io/github/v/release/dan-snelson/Mac-Health-Check?display_name=tag) ![GitHub pre-release (latest by date)](https://img.shields.io/github/v/release/dan-snelson/Mac-Health-Check?display_name=tag&include_prereleases) ![GitHub issues](https://img.shields.io/github/issues-raw/dan-snelson/Mac-Health-Check) ![GitHub closed issues](https://img.shields.io/github/issues-closed-raw/dan-snelson/Mac-Health-Check) ![GitHub pull requests](https://img.shields.io/github/issues-pr-raw/dan-snelson/Mac-Health-Check) ![GitHub closed pull requests](https://img.shields.io/github/issues-pr-closed-raw/dan-snelson/Mac-Health-Check)
 
-# Mac Health Check (3.1.0)
+# Mac Health Check (3.2.0)
 
-> A practical, MDM-agnostic, user-friendly approach to surfacing Mac compliance information directly to end-users via your MDM's Self Service
+> Another pleasant update to the practical, MDM-agnostic, user-friendly approach to surfacing Mac compliance information directly to end-users via your MDM's self-service app
 
-<img src="images/MHC_3.0.0_Hero.png" alt="Mac Health Check Hero" width="800"/>
+<img src="images/MHC_3.2.0_Poster.png" alt="Mac Health Check Hero" width="800"/>
 
 ## Overview
 
@@ -53,14 +53,20 @@ Mac Health Check is particularly valuable in IT support workflows, serving as an
 - If dock icon setup fails, Mac Health Check logs a warning and falls back to the default `/usr/local/bin/dialog` launch path
 
 ## Features
-The following health checks and information reporting are included in version `3.0.0`, which operates in `Self Service` mode by default. (Change `operationMode` to `Debug`, `Development` or `Test` when getting ready to deploy in production.)
+The following health checks and information reporting are included in version `3.2.0`, which operates in `Self Service` mode by default. (Change `operationMode` to `Debug`, `Development` or `Test` when getting ready to deploy in production.)
+
+> :new: Mac Health Check version `3.2.0` introduces a new persistent notification of failed health checks, which remains visible until user-dismissed
+ 
+<img src="images/MHC_3.2.0_failure_notification.png" alt="Health Checks" width="400"/>
 
 ### Health Checks
 
-<img src="images/MHC_3.0.0.png" alt="Health Checks" width="800"/>
+<img src="images/MHC_3.2.0.png" alt="Health Checks" width="800"/>
+
+:tada: Improved in version `3.2.0`
 
 1. macOS Version
-1. Available Updates (including deferred and DDM-enforced updates)
+1. :tada: Available Updates (including deferred and DDM-enforced updates)
 1. System Integrity Protection
 1. Signed System Volume (SSV)
 1. Firewall
@@ -73,7 +79,7 @@ The following health checks and information reporting are included in version `3
 1. Bluetooth Sharing
 1. VPN Client
 1. Last Reboot
-1. Free Disk Space
+1. :tada: Free Disk Space
 1. User's Directory Size and Item Count
     - Desktop
     - Downloads
@@ -89,7 +95,7 @@ The following health checks and information reporting are included in version `3
     - Apple Software and Carrier Updates
     - Apple Certificate Validation
     - Apple Identity and Content Services
-    - Jamf Hosts
+    - :tada: Jamf Hosts
 1. App Auto-Patch
 1. Electron Corner Mask [🔗](https://avarayr.github.io/shamelectron/)
 1. Organizationally required Applications (i.e., Microsoft Teams)
@@ -98,14 +104,14 @@ The following health checks and information reporting are included in version `3
 1. CrowdStrike Falcon*
 1. Palo Alto GlobalProtect*
 1. Network Quality Test
-1. Update Computer Inventory**
+1. :tada: Update Computer Inventory**
 
 *Requires [external check](/external-checks/README.md)
 **Requires Jamf Pro
 
 ### Information Reporting
 
-<img src="images/MHC_3.0.0_Helpmessage.png" alt="In progress" width="800"/>
+<img src="images/MHC_3.2.0_Helpmessage.png" alt="In progress" width="800"/>
 
 #### IT Support
 - Dynamic `supportLabel1` / `supportValue1` through `supportLabel6` / `supportValue6`
@@ -121,7 +127,7 @@ The following health checks and information reporting are included in version `3
 - Full Name
 - User Name
 - User ID
-- Volume Owners :new:
+- Volume Owners
 - Secure Token
 - Location Services
 - Microsoft OneDrive Sync Date
@@ -147,7 +153,7 @@ The following health checks and information reporting are included in version `3
 ### Policy Log Reporting
 
 ```
-MHC (3.1.0): 2026-02-24 03:43:13 - [NOTICE] WARNING: 'localadmin' IS A MEMBER OF 'admin';
+MHC (3.2.0): 2026-03-28 03:43:13 - [NOTICE] WARNING: 'localadmin' IS A MEMBER OF 'admin';
 User: macOS Server Administrator (localadmin) [503] staff everyone localaccounts _appserverusr 
 admin _appserveradm com.apple.sharepoint.group.4 com.apple.sharepoint.group.3
 com.apple.sharepoint.group.1 _appstore _lpadmin _lpoperator _developer _analyticsusers
@@ -198,7 +204,7 @@ A new "Development" Operation Mode has been added to aid in developing Health Ch
 <img src="images/MHC_3.0.0_Development_1.png" alt="Health Checks" width="800"/>
 <img src="images/MHC_3.0.0_Development_2.png" alt="Health Checks" width="800"/>
 
-When `operationMode` is set to `Development`, a dedicated `developmentListitemJSON` is used to allow developers to focus on a specific check, instead of running the entire suite.
+When `operationMode` is set to `Development`, a dedicated `developmentListitemJSON` is used to allow developers to focus on specific checks, instead of running the entire suite.
 
 ```zsh
 ####################################################################################################
@@ -219,7 +225,12 @@ if [[ "${operationMode}" == "Development" ]]; then
 
     developmentListitemJSON='
     [
-        {"title" : "Electron Corner Mask", "subtitle" : "Detects susceptible Electron apps that may cause GPU slowdowns on macOS 26 Tahoe", "icon" : "SF=31.circle,'"${organizationColorScheme}"'", "status" : "pending", "statustext" : "Pending …", "iconalpha" : 0.5}
+        {"title" : "AirDrop", "subtitle" : "Ensure AirDrop is not set to Everyone for security", "icon" : "SF=17.circle,'"${organizationColorScheme}"'", "status" : "pending", "statustext" : "Pending …", "iconalpha" : 0.5},
+        {"title" : "Jamf Hosts","subtitle":"Test connectivity to Jamf Pro cloud and on-prem endpoints","icon":"SF=28.circle,'"${organizationColorScheme}"'", "status":"pending","statustext":"Pending …", "iconalpha" : 0.5},
+        {"title" : "Free Disk Space", "subtitle" : "Checks for the amount of free disk space on your Mac’s boot volume", "icon" : "SF=12.circle,'"${organizationColorScheme}"'", "status" : "pending", "statustext" : "Pending …", "iconalpha" : 0.5},
+        {"title" : "Desktop Size and Item Count", "subtitle" : "Checks the size and item count of the Desktop", "icon" : "SF=13.circle,'"${organizationColorScheme}"'", "status" : "pending", "statustext" : "Pending …", "iconalpha" : 0.5},
+        {"title" : "Downloads Size and Item Count", "subtitle" : "Checks the size and item count of the Downloads folder", "icon" : "SF=14.circle,'"${organizationColorScheme}"'", "status" : "pending", "statustext" : "Pending …", "iconalpha" : 0.5},
+        {"title" : "Trash Size and Item Count", "subtitle" : "Checks the size and item count of the Trash", "icon" : "SF=15.circle,'"${organizationColorScheme}"'", "status" : "pending", "statustext" : "Pending …", "iconalpha" : 0.5}
     ]
     '
     # Validate developmentListitemJSON is valid JSON
@@ -234,7 +245,7 @@ if [[ "${operationMode}" == "Development" ]]; then
 else
 ```
 
-Additionally, a dedicated, single Health Check function is executed:
+Additionally, the matching Health Check functions are executed:
 
 ```zsh
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -246,7 +257,12 @@ if [[ "${operationMode}" == "Development" ]]; then
     # Operation Mode: Development
     notice "Operation Mode is ${operationMode}; using ${operationMode}-specific Health Check."
     dialogUpdate "title: ${humanReadableScriptName} (${scriptVersion})<br>Operation Mode: ${operationMode}"
-    checkElectronCornerMask "0"
+    checkAirDropSettings "0"
+    checkNetworkHosts "1" "Jamf Hosts" "${jamfHosts[@]}"
+    checkFreeDiskSpace "2"
+    checkUserDirectorySizeItems "3" "Desktop" "desktopcomputer.and.macbook" "Desktop"
+    checkUserDirectorySizeItems "4" "Downloads" "arrow.down.circle.fill" "Downloads"
+    checkUserDirectorySizeItems "5" ".Trash" "trash.fill" "Trash"
 
 else
 ```

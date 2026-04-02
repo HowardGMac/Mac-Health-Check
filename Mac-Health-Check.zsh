@@ -17,9 +17,24 @@
 #
 # HISTORY
 #
-# Version 3.1.0, 03-Mar-2026, Dan K. Snelson (@dan-snelson)
-#   - Refactored code to more reliably display `$humanReadableScriptName` in the Dock
-#   - Added Volume Owners to `$helpmessage`
+# Version 3.2.0, 02-Apr-2026, Dan K. Snelson (@dan-snelson)
+#   - Preserve user-provided local `organizationOverlayiconURL` files by downloading remote overlay
+#     icons to a per-run temp path and only removing that script-managed asset during cleanup. (Thanks for the heads-up, @brian_b!)
+#   - Synced DDM OS enforcement detection in `checkAvailableSoftwareUpdates()` with newer
+#     [DDM OS Reminder](https://github.com/dan-snelson/DDM-OS-Reminder) corrections: prefer the
+#     newest trustworthy declaration timestamp, recognize currently applicable declarations, and
+#     use future padded enforcement deadlines when valid.
+#   - Updated Jamf Pro Cloud & On-prem Endpoints (Pull Request #83; thanks for yet another one, @HowardGMac!)
+#   - Fix: SSO checks report 'not configured' instead of 'NOT logged in' when SSO type is absent (Pull Request #82; thanks for yet another one, @bigdoodr!)
+#   - Updated `checkFreeDiskSpace()` to prefer Finder-aligned available capacity via `NSURLVolumeAvailableCapacityForImportantUsageKey`, improving visibility of purgeable space such as local Time Machine snapshots and iCloud-managed capacity (thanks for the cross-project [Pull Request](https://github.com/dan-snelson/DDM-OS-Reminder/pull/80), @huexley!)
+#   - Added `displayFailureNotification` function to present a `--notification --style pseudo-alert`
+#     (swiftDialog 3.1.0.4970) summary of failed health checks when failures are detected
+#   - Hardened Jamf Pro inventory submission to only send `-endUsername` when a valid SSO username
+#     is available, preventing `"NOT logged in"` placeholder values from being submitted in non-PSSO
+#     environments, and added explicit inventory notices that log whether `-endUsername` was used
+#     plus its source (Kerberos SSOe, Platform SSOe, or None) and resolved value (`<empty>` when not used).
+#     Issue #81; sorry for any Dan-induced headaches, @tonyyo11!
+#   - Refactored `checkOS()` to better handle beta versions vs. Background Security Improvement versions
 #
 ####################################################################################################
 
@@ -34,7 +49,7 @@
 export PATH=/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin/
 
 # Script Version
-scriptVersion="3.1.0"
+scriptVersion="3.2.0"
 
 # Client-side Log
 scriptLog="/var/log/org.churchofjesuschrist.log"
@@ -43,7 +58,7 @@ scriptLog="/var/log/org.churchofjesuschrist.log"
 autoload -Uz is-at-least
 
 # Minimum Required Version of swiftDialog
-swiftDialogMinimumRequiredVersion="3.0.0.4952"
+swiftDialogMinimumRequiredVersion="3.0.1.4955"
 
 # Force locale to English (so `date` does not error on localization formatting)
 LANG="en_us_88591"
@@ -139,7 +154,12 @@ allowedMaximumDirectoryPercentage="5"
 # Network Quality Test Maximum Age
 # Leverages `date -v-`; One of either y, m, w, d, H, M or S
 # must be used to specify which part of the date is to be adjusted
-networkQualityTestMaximumAge="1H"
+networkQualityTestMaximumAge="4H"
+
+# SOFA Cache Maximum Age
+# Leverages `date -v-`; One of either y, m, w, d, H, M or S
+# must be used to specify which part of the date is to be adjusted
+sofaCacheMaximumAge="1d"
 
 # Allowed number of uptime minutes
 # - 1 day = 24 hours × 60 minutes/hour = 1,440 minutes
@@ -370,25 +390,46 @@ case "${secureTokenStatus}" in
     *)              secureToken="Unknown"   ;;
 esac
 
+# Initialize Jamf Pro inventory endUsername variable (thanks, @tonyyo11!)
+inventoryEndUsername=""
+inventoryEndUsernameSource="None"
+kerberosSSOeResult="Not configured"
+
 # Kerberos Single Sign-on Extension
 if [[ -n "${kerberosRealm}" ]]; then
-    su \- "${loggedInUser}" -c "app-sso -i ${kerberosRealm}" > /var/tmp/app-sso.plist
-    ssoLoginTest=$( /usr/libexec/PlistBuddy -c "Print:login_date" /var/tmp/app-sso.plist 2>&1 )
-    if [[ ${ssoLoginTest} == *"Does Not Exist"* ]]; then
-        kerberosSSOeResult="${loggedInUser} NOT logged in"
+    su \- "${loggedInUser}" -c "app-sso kerberos --realminfo ${kerberosRealm}" > /var/tmp/app-sso.plist 2>/dev/null
+    if [[ -f /var/tmp/app-sso.plist ]] && xmllint --noout /var/tmp/app-sso.plist >/dev/null 2>&1; then
+        ssoLoginTest=$( /usr/libexec/PlistBuddy -c "Print:login_date" /var/tmp/app-sso.plist 2>&1 )
+        if [[ ${ssoLoginTest} == *"Does Not Exist"* ]]; then
+            kerberosSSOeResult="${loggedInUser} NOT logged in"
+        else
+            username=$( /usr/libexec/PlistBuddy -c "Print:upn" /var/tmp/app-sso.plist 2>/dev/null | awk -F@ '{print $1}' )
+            if [[ -n "${username}" ]]; then
+                kerberosSSOeResult="${username}"
+                inventoryEndUsername="${username}"
+                inventoryEndUsernameSource="Kerberos SSOe"
+            else
+                kerberosSSOeResult="${loggedInUser} NOT logged in"
+            fi
+        fi
     else
-        username=$( /usr/libexec/PlistBuddy -c "Print:upn" /var/tmp/app-sso.plist | awk -F@ '{print $1}' )
-        kerberosSSOeResult="${username}"
+        kerberosSSOeResult="Kerberos SSO not configured"
     fi
-    rm -f /var/tmp/app-sso.plist
+    rm -f /var/tmp/app-sso.plist 2>/dev/null
 fi
 
 # Platform Single Sign-on Extension
-pssoeEmail=$( dscl . read /Users/"${loggedInUser}" dsAttrTypeStandard:AltSecurityIdentities 2>/dev/null | awk -F'SSO:' '/PlatformSSO/ {print $2}' )
+pssoeEmail=$( dscl . read /Users/"${loggedInUser}" dsAttrTypeStandard:AltSecurityIdentities 2>/dev/null | awk -F'SSO:' '/PlatformSSO/ {print $2}' | tail -1 | awk '{$1=$1; print}' )
 if [[ -n "${pssoeEmail}" ]]; then
     platformSSOeResult="${pssoeEmail}"
+    if [[ -z "${inventoryEndUsername}" ]]; then
+        inventoryEndUsername=$( echo "${pssoeEmail}" | awk -F@ '{print $1}' )
+        if [[ -n "${inventoryEndUsername}" ]]; then
+            inventoryEndUsernameSource="Platform SSOe"
+        fi
+    fi
 else
-    platformSSOeResult="${loggedInUser} NOT logged in"
+    platformSSOeResult="Platform SSO not configured"
 fi
 
 # Last modified time of user's Microsoft OneDrive sync file (thanks, @pbowden-msft!)
@@ -629,6 +670,9 @@ fi
 dialogAppBundle="/Library/Application Support/Dialog/Dialog.app"
 dialogBinary="/usr/local/bin/dialog"
 
+# Notification Icon URL (used by displayFailureNotification)
+notificationIconURL="https://raw.githubusercontent.com/dan-snelson/Mac-Health-Check/refs/heads/main/images/MHC_icon.png"
+
 # Enable debugging options for swiftDialog
 dialogBinaryDebugArgs=()
 [[ "${operationMode}" == "Debug" ]] && dialogBinaryDebugArgs=(--verbose --resizable --debug red)
@@ -638,6 +682,7 @@ dialogDockNamedApp="/Library/Application Support/Dialog/${humanReadableScriptNam
 dialogLaunchBinary="${dialogBinary}"
 dialogDockIcon="default"
 dialogDockIconFile="/var/tmp/dockicon.png"
+dialogOverlayIconFile="/var/tmp/overlayicon_${organizationScriptName}_$$.png"
 listitemLength="0"
 remainingChecks="0"
 completedCheckIndicesCsv=","
@@ -674,6 +719,7 @@ else
 fi
 
 # Process the overlayicon from ${organizationOverlayiconURL}
+overlayicon="/System/Library/CoreServices/Apple Diagnostics.app"
 if [[ -n "${organizationOverlayiconURL}" ]]; then
     # Local file path (file or app bundle)
     if [[ -e "${organizationOverlayiconURL}" ]]; then
@@ -691,16 +737,14 @@ if [[ -n "${organizationOverlayiconURL}" ]]; then
 
     # Remote URL
     else
-        curl -o "/var/tmp/overlayicon.png" "${organizationOverlayiconURL}" --silent --show-error --fail
+        curl -o "${dialogOverlayIconFile}" "${organizationOverlayiconURL}" --silent --show-error --fail
         if [[ "$?" -ne 0 ]]; then
             echo "Error: Failed to download the overlayicon"
             overlayicon="/System/Library/CoreServices/Apple Diagnostics.app"
         else
-            overlayicon="/var/tmp/overlayicon.png"
+            overlayicon="${dialogOverlayIconFile}"
         fi
     fi
-else
-    overlayicon="/System/Library/CoreServices/Apple Diagnostics.app"
 fi
 
 
@@ -1689,6 +1733,37 @@ EOF
 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# Display Failure Notification (Requires swiftDialog 3.1.0.4970+)
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+function displayFailureNotification() {
+
+    notice "Displaying failure notification …"
+
+    local failureList=""
+    local -a failedItems
+    failedItems=( "${(s/; /)overallHealth}" )
+    for item in "${failedItems[@]}"; do
+        [[ -n "${item}" ]] && failureList+="\n• ${item}"
+    done
+
+    local notificationMessage="Items failed during this health check. Please [contact support](${supportTeamWebsite}) for assistance.${failureList}"
+
+    "${dialogBinary}" \
+        --notification \
+        --style pseudo-alert \
+        --icon "${notificationIconURL}" \
+        --title "${humanReadableScriptName} Failures" \
+        --message "${notificationMessage}" \
+        --button1text "Close" \
+        --button2text "Contact Support" \
+        --button2action "${supportTeamWebsite}" &
+
+}
+
+
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # Quit Script (thanks, @bartreadon!)
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
@@ -1710,6 +1785,7 @@ function quitScript() {
         if [[ "${operationMode}" != "Silent" ]]; then
             dialogUpdate "icon: SF=xmark.circle, weight=bold, colour1=#BB1717, colour2=#F31F1F"
             dialogUpdate "title: Computer Unhealthy <br>as of $( date '+%d-%b-%Y %H:%M:%S' )"
+            displayFailureNotification
         fi
         if [[ -n "${webhookURL}" ]]; then
             info "Sending webhook message"
@@ -1756,10 +1832,7 @@ function quitScript() {
     rm -f "${dialogJSONFile}"
     rm -f -- /var/tmp/dialogJSONFile_${organizationScriptName}.*(N)
 
-    if [[ -f "${overlayicon}" ]] && [[ "${overlayicon}" != "/System/Library/CoreServices/Apple Diagnostics.app" ]]; then
-        rm -f "${overlayicon}"
-    fi
-    rm -f "/var/tmp/overlayicon.png"
+    rm -f "${dialogOverlayIconFile}"
     rm -f "${dialogDockIconFile}"
 
     # Remove copied Dock-named swiftDialog app bundle (never remove source Dialog.app).
@@ -1767,14 +1840,8 @@ function quitScript() {
         rm -Rf "${dialogDockNamedApp}"
     fi
 
-    rm -f "/var/tmp/networkQualityTest"
     rm -f "/var/tmp/app-sso.plist"
     rm -f /var/tmp/dialog.log
-
-    if [[ -n "${json_cache_dir}" ]]; then
-        rm -Rf "${json_cache_dir}"
-    fi
-    rm -Rf "/var/tmp/sofa"
 
     notice "Total Elapsed Time: $(printf '%dh:%dm:%ds\n' $((SECONDS/3600)) $((SECONDS%3600/60)) $((SECONDS%60)))"
 
@@ -2008,16 +2075,25 @@ function checkOS() {
 
     sleep "${anticipationDuration}"
 
-    if [[ "${osBuild}" =~ [a-zA-Z]$ ]]; then
+    # Check if this is a beta build vs. a Background Security Improvement (BSI) release
+    # Beta builds: osVersionExtra is empty AND osBuild ends with a letter (e.g., "25D771280a" with no ProductVersionExtra)
+    # BSI releases: osVersionExtra is populated (e.g., "(a)") AND osBuild ends with a letter (e.g., "25D771280a")
+    # BSI releases are production versions and should proceed through normal SOFA compliance checking
 
-        logComment "OS Build, ${osBuild}, ends with a letter; skipping"
+    if [[ -z "${osVersionExtra}" ]] && [[ "${osBuild}" =~ [a-zA-Z]$ ]]; then
+
+        logComment "OS Build, ${osBuild}, ends with a letter and ProductVersionExtra is empty; treating as beta"
         osResult="Beta macOS ${osVersion} (${osBuild})"
         dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=#F8D84A, iconalpha: 1, subtitle: Beta builds of macOS are purposely marked as unsupported, status: error, statustext: ${osResult}"
         warning "${osResult}"
     
     else
 
-        logComment "OS Build, ${osBuild}, ends with a number; proceeding …"
+        if [[ -n "${osVersionExtra}" ]]; then
+            logComment "OS Build, ${osBuild}, is a Background Security Improvement release (ProductVersionExtra: ${osVersionExtra}); proceeding with SOFA compliance check …"
+        else
+            logComment "OS Build, ${osBuild}, ends with a number; proceeding with SOFA compliance check …"
+        fi
 
         # N-rule variable [How many previous minor OS path versions will be marked as compliant]
         n="${previousMinorOS}"
@@ -2034,20 +2110,37 @@ function checkOS() {
         # ensure local cache folder exists
         mkdir -p "$json_cache_dir"
 
-        # check local vs online using etag
-        if [[ -f "$etag_cache" && -f "$json_cache" ]]; then
-            logComment "e-tag stored, will download only if e-tag doesn’t match"
-            etag_old=$(cat "$etag_cache")
-            curl --compressed --silent --etag-compare "$etag_cache" --etag-save "$etag_cache" --header "User-Agent: $user_agent" "$online_json_url" --output "$json_cache"
-            etag_new=$(cat "$etag_cache")
-            if [[ "$etag_old" == "$etag_new" ]]; then
-                logComment "Cached ETag matched online ETag - cached json file is up to date"
+        # use cached SOFA data if still fresh; otherwise fall through to ETag check or download
+        sofaDataCached="false"
+        if [[ -f "$json_cache" ]]; then
+            sofaCacheFileEpoch=$( stat -f "%m" "$json_cache" )
+            sofaCacheMaximumEpoch=$( date -v-"${sofaCacheMaximumAge}" +%s )
+            if [[ "${sofaCacheFileEpoch}" -gt "${sofaCacheMaximumEpoch}" ]]; then
+                logComment "Using cached SOFA data (age within ${sofaCacheMaximumAge})"
+                sofaDataCached="true"
             else
-                logComment "Cached ETag did not match online ETag, so downloaded new SOFA json file"
+                logComment "Cached SOFA data is stale; removing …"
+                rm -Rf "$json_cache_dir"
+                mkdir -p "$json_cache_dir"
             fi
-        else
-            logComment "No e-tag cached, proceeding to download SOFA json file"
-            curl --compressed --location --max-time 3 --silent --header "User-Agent: $user_agent" "$online_json_url" --etag-save "$etag_cache" --output "$json_cache"
+        fi
+
+        # check local vs online using etag (skipped if using fresh cache)
+        if [[ "${sofaDataCached}" != "true" ]]; then
+            if [[ -f "$etag_cache" && -f "$json_cache" ]]; then
+                logComment "e-tag stored, will download only if e-tag doesn’t match"
+                etag_old=$(cat "$etag_cache")
+                curl --compressed --silent --etag-compare "$etag_cache" --etag-save "$etag_cache" --header "User-Agent: $user_agent" "$online_json_url" --output "$json_cache"
+                etag_new=$(cat "$etag_cache")
+                if [[ "$etag_old" == "$etag_new" ]]; then
+                    logComment "Cached ETag matched online ETag - cached json file is up to date"
+                else
+                    logComment "Cached ETag did not match online ETag, so downloaded new SOFA json file"
+                fi
+            else
+                logComment "No e-tag cached, proceeding to download SOFA json file"
+                curl --compressed --location --max-time 3 --silent --header "User-Agent: $user_agent" "$online_json_url" --etag-save "$etag_cache" --output "$json_cache"
+            fi
         fi
 
         # 1. Get model (DeviceID)
@@ -2268,6 +2361,250 @@ function checkStagedUpdate() {
 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# Resolve DDM Enforcement from install.log
+# Adapted from DDM OS Reminder 3.1.0b3
+# Returns tab-separated: sourceType, logTimestamp, enforcedInstallDate, versionString, buildVersionString
+# Fails closed (non-zero) when no trustworthy DDM enforcement state can be resolved
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+function resolveDDMEnforcementFromInstallLog() {
+
+    local installLogPath="/var/log/install.log"
+    local ddmResolverLookbackLines="4000"
+
+    if [[ ! -r "${installLogPath}" ]]; then
+        return 1
+    fi
+
+    /usr/bin/tail -n "${ddmResolverLookbackLines}" "${installLogPath}" 2>/dev/null | /usr/bin/awk '
+        function extractField(line, field,    needle, rest, pos) {
+            needle = "|" field ":"
+            pos = index(line, needle)
+            if (!pos) {
+                return ""
+            }
+
+            rest = substr(line, pos + length(needle))
+            pos = index(rest, "|")
+            if (pos) {
+                return substr(rest, 1, pos - 1)
+            }
+
+            return rest
+        }
+
+        function extractRequestedVersion(line,    pos, rest) {
+            pos = index(line, "requestedPMV=")
+            if (!pos) {
+                return ""
+            }
+
+            rest = substr(line, pos + 13)
+            if (match(rest, /^[0-9]+\.[0-9]+(\.[0-9]+)?/)) {
+                return substr(rest, RSTART, RLENGTH)
+            }
+
+            return ""
+        }
+
+        {
+            if (index($0, "requestedPMV=")) {
+                activeRequestedVersion = extractRequestedVersion($0)
+                next
+            }
+
+            if (activeRequestedVersion != "" && (index($0, "MADownloadNoMatchFound") || index($0, "pallasNoPMVMatchFound=true") || index($0, "No available updates found. Please try again later."))) {
+                noMatchVersion[activeRequestedVersion] = 1
+            }
+
+            sourceType = ""
+            sourcePriority = 0
+
+            if (index($0, "declarationFromKeys]: Found currently applicable declaration")) {
+                sourceType = "currentApplicableDeclaration"
+                sourcePriority = 4
+            } else if (index($0, "declarationFromKeys]: Falling back to default applicable declaration")) {
+                sourceType = "defaultApplicableDeclaration"
+                sourcePriority = 3
+            } else if (index($0, "Found DDM enforced install (")) {
+                sourceType = "foundDdmEnforcedInstall"
+                sourcePriority = 2
+            } else if (index($0, "EnforcedInstallDate:")) {
+                sourceType = "genericEnforcedInstallDate"
+                sourcePriority = 1
+            } else {
+                next
+            }
+
+            logTimestamp = substr($0, 1, 22)
+            if (logTimestamp !~ /^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}[+-][0-9]{2}$/) {
+                next
+            }
+
+            enforcedInstallDate = extractField($0, "EnforcedInstallDate")
+            versionString = extractField($0, "VersionString")
+            buildVersionString = extractField($0, "BuildVersionString")
+
+            if (enforcedInstallDate == "" || versionString == "" || buildVersionString == "") {
+                next
+            }
+
+            candidateKey = sourceType SUBSEP enforcedInstallDate SUBSEP versionString SUBSEP buildVersionString
+            if (!(candidateKey in candidateTimestamp) || logTimestamp > candidateTimestamp[candidateKey]) {
+                candidateTimestamp[candidateKey] = logTimestamp
+                candidateSourceType[candidateKey] = sourceType
+                candidateEnforcedInstallDate[candidateKey] = enforcedInstallDate
+                candidateVersionString[candidateKey] = versionString
+                candidateBuildVersionString[candidateKey] = buildVersionString
+                candidatePriority[candidateKey] = sourcePriority
+            }
+        }
+
+        END {
+            latestTimestamp = ""
+            for (candidateKey in candidateTimestamp) {
+                if (latestTimestamp == "" || candidateTimestamp[candidateKey] > latestTimestamp) {
+                    latestTimestamp = candidateTimestamp[candidateKey]
+                }
+            }
+
+            if (latestTimestamp == "") {
+                exit 20
+            }
+
+            highestPriority = 0
+            filteredCount = 0
+            for (candidateKey in candidateTimestamp) {
+                if (candidateTimestamp[candidateKey] == latestTimestamp && candidatePriority[candidateKey] > highestPriority) {
+                    highestPriority = candidatePriority[candidateKey]
+                }
+            }
+
+            for (candidateKey in candidateTimestamp) {
+                if (candidateTimestamp[candidateKey] == latestTimestamp && candidatePriority[candidateKey] == highestPriority) {
+                    filteredCount++
+                    filteredCandidate[filteredCount] = candidateKey
+                }
+            }
+
+            if (filteredCount != 1) {
+                exit 21
+            }
+
+            candidateKey = filteredCandidate[1]
+            versionString = candidateVersionString[candidateKey]
+
+            if (versionString !~ /^[0-9]{1,3}\.[0-9]{1,3}(\.[0-9]{1,3})?$/) {
+                exit 22
+            }
+
+            if (versionString in noMatchVersion) {
+                exit 23
+            }
+
+            printf "%s\t%s\t%s\t%s\t%s\n", \
+                candidateSourceType[candidateKey], \
+                candidateTimestamp[candidateKey], \
+                candidateEnforcedInstallDate[candidateKey], \
+                candidateVersionString[candidateKey], \
+                candidateBuildVersionString[candidateKey]
+        }
+    '
+
+}
+
+
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# Resolve Padded DDM Enforcement Date from install.log
+# Returns a raw padded enforcement date only when it matches the selected declaration and is still future-valid
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+function resolvePaddedEnforcementDateForCandidate() {
+
+    local declarationTimestamp="${1}"
+    local declarationSignature="${2}"
+    local installLogPath="/var/log/install.log"
+    local ddmResolverLookbackLines="4000"
+    local paddedDateRaw=""
+    local paddedEpoch=""
+    local nowEpoch=""
+
+    paddedDateRaw="$(
+        /usr/bin/tail -n "${ddmResolverLookbackLines}" "${installLogPath}" 2>/dev/null | /usr/bin/awk -v chosenTimestamp="${declarationTimestamp}" -v chosenSignature="${declarationSignature}" '
+            function extractField(line, field,    needle, rest, pos) {
+                needle = "|" field ":"
+                pos = index(line, needle)
+                if (!pos) {
+                    return ""
+                }
+
+                rest = substr(line, pos + length(needle))
+                pos = index(rest, "|")
+                if (pos) {
+                    return substr(rest, 1, pos - 1)
+                }
+
+                return rest
+            }
+
+            {
+                logTimestamp = substr($0, 1, 22)
+                if (logTimestamp !~ /^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}[+-][0-9]{2}$/) {
+                    next
+                }
+
+                if (logTimestamp < chosenTimestamp) {
+                    next
+                }
+
+                if (index($0, "EnforcedInstallDate:")) {
+                    enforcedInstallDate = extractField($0, "EnforcedInstallDate")
+                    versionString = extractField($0, "VersionString")
+                    buildVersionString = extractField($0, "BuildVersionString")
+
+                    if (enforcedInstallDate != "" && versionString != "" && buildVersionString != "") {
+                        if (enforcedInstallDate "|" versionString "|" buildVersionString != chosenSignature) {
+                            conflictDetected = 1
+                        }
+                    }
+                }
+
+                if (index($0, "setPastDuePaddedEnforcementDate is set: ")) {
+                    paddedDateRaw = substr($0, index($0, "setPastDuePaddedEnforcementDate is set: ") + 39)
+                    sub(/^[[:space:]]+/, "", paddedDateRaw)
+                    sub(/[[:space:]]+$/, "", paddedDateRaw)
+                }
+            }
+
+            END {
+                if (!conflictDetected && paddedDateRaw != "") {
+                    print paddedDateRaw
+                }
+            }
+        '
+    )"
+
+    if [[ -z "${paddedDateRaw}" ]]; then
+        return 1
+    fi
+
+    paddedEpoch="$(
+        /bin/date -jf "%a %b %d %H:%M:%S %Y" "${paddedDateRaw}" "+%s" 2>/dev/null \
+        || echo ""
+    )"
+    nowEpoch="$(/bin/date +%s)"
+
+    if [[ -z "${paddedEpoch}" || ! "${paddedEpoch}" =~ ^[0-9]+$ ]] || (( paddedEpoch <= nowEpoch )); then
+        return 1
+    fi
+
+    printf '%s\n' "${paddedDateRaw}"
+}
+
+
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # Check Available Software Updates
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
@@ -2290,20 +2627,30 @@ function checkAvailableSoftwareUpdates() {
         info "${mdmClientAvailableOSUpdates}"
     fi
 
-    # DDM-enforced OS Version
-    ddmEnforcedInstallDateRaw=$( grep EnforcedInstallDate /var/log/install.log | tail -n 1 )
-    if [[ -n "$ddmEnforcedInstallDateRaw" ]]; then
-        
-        # DDM-enforced Install Date
-        tmp=${ddmEnforcedInstallDateRaw##*|EnforcedInstallDate:}
-        ddmEnforcedInstallDate=${tmp%%|*}
-        
-        # DDM-enforced Version
-        tmp=${ddmEnforcedInstallDateRaw##*|VersionString:}
-        ddmVersionString=${tmp%%|*}
+    # DDM-enforced OS Version (priority-ranked resolver; fails closed on ambiguous or conflicting state)
+    local ddmResolvedCandidate=""
+    local ddmResolverExitCode=0
+    ddmResolvedCandidate="$( resolveDDMEnforcementFromInstallLog )"
+    ddmResolverExitCode=$?
 
-        ddmEnforcedInstallDateHumanReadable=$(date -jf "%Y-%m-%dT%H" "$ddmEnforcedInstallDate" "+%d-%b-%Y" 2>/dev/null)
+    local ddmResolverSource="" ddmDeclarationLogTimestamp="" ddmEnforcedInstallDate="" ddmVersionString="" ddmBuildVersionString=""
+    local ddmPaddedEnforcementDateRaw="" ddmEnforcedInstallDateDisplay="" ddmEnforcedInstallDateHumanReadable="" ddmDateSource="raw"
+    if (( ddmResolverExitCode == 0 )) && [[ -n "${ddmResolvedCandidate}" ]]; then
+        IFS=$'\t' read -r ddmResolverSource ddmDeclarationLogTimestamp ddmEnforcedInstallDate ddmVersionString ddmBuildVersionString <<< "${ddmResolvedCandidate}"
+        ddmEnforcedInstallDateDisplay="${ddmEnforcedInstallDate}"
+        ddmPaddedEnforcementDateRaw="$( resolvePaddedEnforcementDateForCandidate "${ddmDeclarationLogTimestamp}" "${ddmEnforcedInstallDate}|${ddmVersionString}|${ddmBuildVersionString}" )"
+        if [[ -n "${ddmPaddedEnforcementDateRaw}" ]]; then
+            ddmEnforcedInstallDateDisplay="${ddmPaddedEnforcementDateRaw}"
+            ddmDateSource="padded"
+            ddmEnforcedInstallDateHumanReadable="$(date -jf "%a %b %d %H:%M:%S %Y" "${ddmPaddedEnforcementDateRaw}" "+%d-%b-%Y" 2>/dev/null)"
+        else
+            ddmEnforcedInstallDateHumanReadable="$(date -jf "%Y-%m-%dT%H:%M:%S" "${ddmEnforcedInstallDate%Z}" "+%d-%b-%Y" 2>/dev/null)"
+        fi
 
+        [[ -z "${ddmEnforcedInstallDateHumanReadable}" ]] && ddmEnforcedInstallDateHumanReadable="${ddmEnforcedInstallDateDisplay}"
+        info "DDM Resolver: source=${ddmResolverSource} | date=${ddmEnforcedInstallDateDisplay} | dateSource=${ddmDateSource} | version=${ddmVersionString} | build=${ddmBuildVersionString}"
+    else
+        info "DDM Resolver: no trustworthy DDM enforcement state resolved (exit ${ddmResolverExitCode})"
     fi
 
     # Software Update Recommended Updates
@@ -2350,6 +2697,10 @@ function checkAvailableSoftwareUpdates() {
             availableSoftwareUpdates="None"
             dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=#63CA56, iconalpha: 0.6, subtitle: Thanks for keeping your Mac up-to-date, status: success, statustext: ${availableSoftwareUpdates}"
             info "${humanReadableCheckName}: ${availableSoftwareUpdates}"
+        elif [[ -n "${ddmBuildVersionString}" && "${ddmBuildVersionString}" != "(null)" && "${osBuild}" == "${ddmBuildVersionString}" ]]; then
+            availableSoftwareUpdates="Up-to-date"
+            dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=#63CA56, iconalpha: 0.6, subtitle: Thanks for keeping your Mac up-to-date, status: success, statustext: ${availableSoftwareUpdates}"
+            info "${humanReadableCheckName}: ${availableSoftwareUpdates} (build match)"
         elif is-at-least "${ddmVersionString}" "${osVersion}"; then
             availableSoftwareUpdates="Up-to-date"
             dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=#63CA56, iconalpha: 0.6, subtitle: Thanks for keeping your Mac up-to-date, status: success, statustext: ${availableSoftwareUpdates}"
@@ -2364,6 +2715,7 @@ function checkAvailableSoftwareUpdates() {
     fi
 
 }
+
 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -2684,6 +3036,13 @@ function checkUptime() {
 function checkFreeDiskSpace() {
 
     local humanReadableCheckName="Free Disk Space"
+    local diskRawValues=""
+    local diskutilInfo=""
+    local freeSpace=""
+    local diskBytes=""
+    local freeBytes=""
+    local freePercentage=""
+    local diskSpace=""
     notice "Check ${humanReadableCheckName} …"
 
     dialogUpdate "icon: SF=externaldrive.fill.badge.checkmark,${organizationColorScheme}"
@@ -2693,15 +3052,41 @@ function checkFreeDiskSpace() {
 
     sleep "${anticipationDuration}"
 
-    freeSpace=$( diskutil info / | grep -E 'Free Space|Available Space|Container Free Space' | awk -F ":\s*" '{ print $2 }' | awk -F "(" '{ print $1 }' | xargs )
-    diskBytes=$( diskutil info / | grep -E 'Total Space' | sed -E 's/.*\(([0-9]+) Bytes\).*/\1/' )
-    freeBytes=$( diskutil info / | grep -E 'Free Space|Available Space|Container Free Space' | sed -E 's/.*\(([0-9]+) Bytes\).*/\1/' )
-    freePercentage=$( echo "scale=2; ( $freeBytes * 100 ) / $diskBytes" | bc )
-    diskSpace="$freeSpace free (${freePercentage}% available)"
+    diskRawValues=$( osascript -l JavaScript -e "ObjC.import('Foundation'); var url = \$.NSURL.fileURLWithPath('/'); var result = url.resourceValuesForKeysError(['NSURLVolumeAvailableCapacityForImportantUsageKey','NSURLVolumeTotalCapacityKey'], null); [result.valueForKey('NSURLVolumeAvailableCapacityForImportantUsageKey').js, result.valueForKey('NSURLVolumeTotalCapacityKey').js].join(' ');" 2>/dev/null )
+    read freeBytes diskBytes <<< "${diskRawValues}"
 
-    diskMessage="${humanReadableCheckName}: ${diskSpace}"
+    if [[ "${freeBytes}" == <-> && "${diskBytes}" == <-> ]] && (( freeBytes > 0 && diskBytes >= freeBytes )); then
 
-    if (( $( echo ${freePercentage}'<'${allowedMinimumFreeDiskPercentage} | bc -l ) )); then
+        freeSpace=$( echo "scale=1; ${freeBytes} / 1000000000" | bc )
+        freeSpace="${freeSpace} GB"
+        freePercentage=$( echo "scale=2; (${freeBytes} * 100) / ${diskBytes}" | bc )
+
+    else
+
+        warning "JXA disk space query returned invalid data; falling back to diskutil. diskBytes=${diskBytes}, freeBytes=${freeBytes}"
+        diskutilInfo=$( diskutil info / 2>/dev/null )
+        freeSpace=$( echo "${diskutilInfo}" | grep -E 'Free Space|Available Space|Container Free Space' | awk -F ":\s*" '{ print $2 }' | awk -F "(" '{ print $1 }' | xargs )
+        diskBytes=$( echo "${diskutilInfo}" | grep -E 'Total Space' | sed -E 's/.*\(([0-9]+) Bytes\).*/\1/' )
+        freeBytes=$( echo "${diskutilInfo}" | grep -E 'Free Space|Available Space|Container Free Space' | sed -E 's/.*\(([0-9]+) Bytes\).*/\1/' )
+
+        if [[ "${freeBytes}" == <-> && "${diskBytes}" == <-> ]] && (( diskBytes > 0 && diskBytes >= freeBytes )); then
+
+            freePercentage=$( echo "scale=2; (${freeBytes} * 100) / ${diskBytes}" | bc )
+
+        else
+
+            warning "Invalid disk space data: diskBytes=${diskBytes}, freeBytes=${freeBytes}"
+            dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=#F8D84A, iconalpha: 1, subtitle: Please contact ${supportTeamName}, status: error, statustext: Unable to determine"
+            warning "${humanReadableCheckName}: Unable to determine"
+            return
+
+        fi
+
+    fi
+
+    diskSpace="${freeSpace} free (${freePercentage}% available)"
+
+    if (( $( echo "${freePercentage} < ${allowedMinimumFreeDiskPercentage}" | bc -l ) )); then
 
         dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=#EB5545, iconalpha: 1, subtitle: See KB0080685 Disk Usage to help identify the 50 largest directories, status: fail, statustext: ${diskSpace}"
         errorOut "${humanReadableCheckName}: ${diskSpace}"
@@ -2953,19 +3338,36 @@ idAssocHosts=(
 )
 
 # Jamf Pro Cloud & On-prem Endpoints
+# https://learn.jamf.com/r/en-US/jamf-domains-safelist-reference/Jamf_Domains_Safelist_Reference
+# https://learn.jamf.com/r/en-US/jamf-ip-address-list/Jamf_Public_IP_Address_List
 jamfHosts=(
     "jamf.com,443"
     "test.jamfcloud.com,443"
-    "use1-jcdsdownloads.services.jamfcloud.com,443"
-    "use1-jcds.services.jamfcloud.com,443"
-    "euc1-jcdsdownloads.services.jamfcloud.com,443"
-    "euc1-jcds.services.jamfcloud.com,443"
-    "euw2-jcdsdownloads.services.jamfcloud.com,443"
-    "euw2-jcds.services.jamfcloud.com,443"
-    "apse2-jcdsdownloads.services.jamfcloud.com,443"
-    "apse2-jcds.services.jamfcloud.com,443"
-    "apne1-jcdsdownloads.services.jamfcloud.com,443"
-    "apne1-jcds.services.jamfcloud.com,443"
+    "account.jamf.com,443"
+    "idpcs.jamf.com,443"
+    "account-cdn.jamf.com,443"
+    "cdn.mfe.jamf.io,443"
+    "api.apigw.jamf.com,443"
+    "us.apigw.jamf.com,443"
+    "eu.apigw.jamf.com,443"
+    "apac.apigw.jamf.com,443"
+    "appinstallers-packages.services.jamfcloud.com,443"
+    "registration.cloudconnector.gov.services.jamfcloud.com,443"
+    "registration.cloudconnector.services.jamfcloud.com,443"
+    "ics.services.jamfcloud.com,443"
+    "csa.services.jamfcloud.com,443"
+    "jcds.apne1.inf.jamf.one,443"
+    "jcds.apse2.inf.jamf.one,443"
+    "jcds.euw2.inf.jamf.one,443"
+    "jcds.euc1.inf.jamf.one,443"
+    "jcds.use1.inf.jamf.one,443"
+    "packages.soup.services.jamfcloud.com,443"
+    "www.jamfroutines.com,443"
+    "icon-staging-production-use1-ics-application.s3.amazonaws.com,443"
+    "clientstream.launchdarkly.com,443"
+    "mobile.launchdarkly.com,443"
+    "app.launchdarkly.com,443"
+    "nom.telemetrydeck.com,443"
 )
 
 # Generic network-host tester: uses `nc` for ports or `curl` for URLs
@@ -3366,7 +3768,7 @@ function checkInternal() {
         
     else
 
-        dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=#EB5545, iconalpha: 1, status: fail, statustext: NOT Installed"
+        dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=#EB5545, iconalpha: 1, subtitle: Visit the ${organizationSelfServiceMarketingName} to install ${checkInternalTargetFileDisplayName}, status: fail, statustext: NOT Installed"
         errorOut "${checkInternalTargetFileDisplayName} NOT Installed"
         overallHealth+="${checkInternalTargetFileDisplayName}; "
 
@@ -4046,9 +4448,11 @@ function updateComputerInventory() {
 
     if [[ "${operationMode}" != "Test" ]]; then
 
-        if [[ -n "${platformSSOeResult}" ]]; then
-            jamf recon -endUsername "${platformSSOeResult}"
+        if [[ -n "${inventoryEndUsername}" ]]; then
+            notice "Including '-endUsername' in 'jamf recon' (source: ${inventoryEndUsernameSource}; value: ${inventoryEndUsername})"
+            jamf recon -endUsername "${inventoryEndUsername}"
         else
+            warning "NOT including '-endUsername' in 'jamf recon' since no SSO username is available for ${loggedInUser} (source: ${inventoryEndUsernameSource}; value: <empty>)"
             jamf recon # -verbose
         fi
 
@@ -4086,7 +4490,7 @@ if [[ "${operationMode}" == "Development" ]]; then
 
     developmentListitemJSON='
     [
-        {"title" : "Touch ID", "subtitle" : "Touch ID provides secure biometric authentication for unlock your Mac and authorize third-party apps.", "icon" : "SF=09.circle,'"${organizationColorScheme}"'", "status" : "pending", "statustext" : "Pending …", "iconalpha" : 0.5}
+        {"title" : "Microsoft Teams", "subtitle" : "The hub for teamwork in Microsoft 365.", "icon" : "SF=31.circle,'"${organizationColorScheme}"'", "status" : "pending", "statustext" : "Pending …", "iconalpha" : 0.5}
     ]
     '
     # Validate developmentListitemJSON is valid JSON
@@ -4225,9 +4629,9 @@ if [[ "${operationMode}" == "Development" ]]; then
     # Operation Mode: Development
     notice "Operation Mode is ${operationMode}; using ${operationMode}-specific Health Check."
     dialogUpdate "title: ${humanReadableScriptName} (${scriptVersion})<br>Operation Mode: ${operationMode}"
-    # set -x
-    checkTouchID "0"
-    # set +x
+    set -x
+    checkInternal "0" "/Applications/Microsoft Teams.app" "/Applications/Microsoft Teams.app" "Microsoft Teams"
+    set +x
 
 else
 
