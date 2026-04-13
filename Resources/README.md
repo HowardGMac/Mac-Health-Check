@@ -36,7 +36,7 @@ This directory contains two helper tools used to package or wrap `Mac-Health-Che
 Run from this directory:
 
 ```zsh
-cd /Users/danksnelson/Documents/GitHub/dan-snelson/Mac-Health-Check/Resources
+cd /Users/dan/Documents/GitHub/dan-snelson/Mac-Health-Check/Resources
 ```
 
 Use defaults:
@@ -80,7 +80,7 @@ The `Makefile` packages `../Mac-Health-Check.zsh` as:
 Run from this directory:
 
 ```zsh
-cd /Users/danksnelson/Documents/GitHub/dan-snelson/Mac-Health-Check/Resources
+cd /Users/dan/Documents/GitHub/dan-snelson/Mac-Health-Check/Resources
 ```
 
 Show available targets:
