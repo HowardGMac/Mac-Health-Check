@@ -1,6 +1,6 @@
 # Mac Health Check: Deployment Workflow
 
-This diagram provides a step-by-step guide for deploying the `3.2.0` release of Mac Health Check through an MDM solution. Follow the phases in order for a successful deployment.
+This diagram provides a step-by-step guide for deploying the `4.0.0b1` release of Mac Health Check through an MDM solution. Follow the phases in order for a successful deployment.
 
 ```mermaid
 graph TB
@@ -191,7 +191,7 @@ Open `Mac-Health-Check.zsh` and review the **Organization Variables** and **IT S
 | `previousMinorOS` | `2` | How many older macOS versions are compliant |
 | `completionTimer` | `60` | Dialog auto-close (seconds) |
 
-`webhookURL` is configured as **Parameter 5** in the MDM policy, not as a long-lived script default.
+`webhookURL` is configured as **Parameter 5** in the MDM policy, not as a long-lived script default. Splunk reporting is likewise enabled through runtime parameters rather than hard-coded tokens in the script.
 
 ---
 
@@ -212,6 +212,7 @@ If your organization uses BeyondTrust, Cisco Umbrella, CrowdStrike, or GlobalPro
 2. Configure the script parameters:
    - **Parameter 4** — Operation mode (start with `Debug` for initial testing)
    - **Parameter 5** — Webhook URL (optional)
+   - **Parameters 6-10** — Splunk reporting mode, HEC URL, HEC token, optional custom JSON fields, and reporting debug mode
 
 ---
 
@@ -251,7 +252,7 @@ Use the three developer-oriented modes to validate behavior before rolling out t
 After production deployment, monitor:
 
 - **Client logs** at `/var/log/org.churchofjesuschrist.log` on managed Macs — look for `[WARNING]` and `[ERROR]` entries
-- **Dock badge and persistent failure notifications** on test Macs in non-`Silent` modes — confirm countdown badges update per check and failed runs show the `3.2.0` pseudo-alert summary and support action
+- **Dock badge and persistent failure notifications** on test Macs in non-`Silent` modes — confirm countdown badges update per check and failed runs show the current pseudo-alert summary and support action
 - **Webhook notifications** in Teams or Slack (if configured) — review failure summaries
 - **MDM inventory** — for Jamf Pro, each run can trigger a recon; use Smart Group criteria based on extension attributes for fleet-wide compliance visibility
 

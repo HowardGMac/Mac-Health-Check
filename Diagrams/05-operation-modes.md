@@ -1,6 +1,6 @@
 # Mac Health Check: Operation Modes
 
-This diagram compares all five `3.2.0` Mac Health Check operation modes, showing how each mode differs in terms of UI, Dock behavior, logging, and intended use case.
+This diagram compares all five `4.0.0b1` Mac Health Check operation modes, showing how each mode differs in terms of UI, Dock behavior, logging, and intended use case.
 
 ```mermaid
 graph TB
@@ -86,21 +86,21 @@ The primary end-user-facing mode. Launched by a user clicking the Mac Health Che
 ---
 
 ### Silent
-Runs all health checks without displaying any user interface. Intended for scheduled background compliance runs (for example, at login or on recurring MDM check-in). The `anticipationDuration` is automatically set to `0` in this mode to minimize execution time. Results are written to the client log and, if configured, posted to a webhook. Dock integration and persistent failure notifications are suppressed.
+Runs all health checks without displaying any user interface. Intended for scheduled background compliance runs (for example, at login or on recurring MDM check-in). The `anticipationDuration` is automatically set to `0` in this mode to minimize execution time. Results are written to the client log, persisted to the local JSON report, and, if configured, posted to a webhook or forwarded to Splunk. Dock integration and persistent failure notifications are suppressed.
 
 **When to use:** Continuous background compliance monitoring. Pair with a Teams or Slack webhook to surface failures without interrupting users.
 
 ---
 
 ### Debug
-Similar to Self Service, but with `set -x` tracing enabled plus swiftDialog debug launch arguments (`--verbose --resizable --debug red`). This makes it easier to identify which part of the zsh script or dialog rendering is causing unexpected behavior.
+Similar to Self Service, but with `set -x` tracing enabled plus swiftDialog debug launch arguments (`--verbose --resizable --debug red`). In `4.0.0b1`, Debug mode also enables pretty-printed local JSON reporting. This makes it easier to identify which part of the zsh script or dialog rendering is causing unexpected behavior.
 
 **When to use:** Diagnosing why a specific check is failing or returning an unexpected status.
 
 ---
 
 ### Development
-Runs a curated development subset of checks in a normal non-`Silent` dialog flow. In `3.2.0`, that subset covers Available Updates, AirDrop, Jamf Hosts, Free Disk Space, and the Desktop / Downloads / Trash size checks, making it useful for iterating on high-signal list items without running the full vendor-specific suite.
+Runs a curated development subset of checks in a normal non-`Silent` dialog flow. In the current release, that subset remains intentionally smaller than a full production run so you can iterate on high-signal list items without waiting for every vendor-specific check.
 
 **When to use:** Tuning check behavior, remediation copy, or dialog presentation while keeping the run shorter than a full production policy.
 

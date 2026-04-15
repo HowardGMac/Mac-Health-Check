@@ -1,6 +1,6 @@
 # Mac Health Check: System Architecture
 
-This diagram shows the `3.2.0` Mac Health Check ecosystem, from administrator customization through MDM deployment, client-side execution, user interaction, and results output.
+This diagram shows the `4.0.0b1` Mac Health Check ecosystem, from administrator customization through MDM deployment, client-side execution, user interaction, and results output.
 
 ```mermaid
 graph TB
@@ -122,10 +122,11 @@ Optional plugin scripts for third-party tools (BeyondTrust, Cisco Umbrella, Crow
 
 ### MDM Deployment
 
-Mac Health Check is MDM-agnostic and has been tested with eight MDM platforms. The script is uploaded as a policy script and executed with two optional parameters:
+Mac Health Check is MDM-agnostic and has been tested with eight MDM platforms. The script is uploaded as a policy script and executed with optional runtime and reporting parameters:
 
 - **Parameter 4 (`operationMode`)** — Intended production default is `Self Service`; other supported modes are `Silent`, `Debug`, `Development`, and `Test`
 - **Parameter 5 (`webhookURL`)** — Optional Microsoft Teams or Slack webhook URL used when unhealthy runs need to post a failure summary
+- **Parameters 6-10** — Optional Splunk reporting inputs for reporting mode, HEC URL, HEC token, custom JSON fields, and debug formatting
 
 ---
 
@@ -134,7 +135,7 @@ Mac Health Check is MDM-agnostic and has been tested with eight MDM platforms. T
 **Pre-flight Checks**
 The script validates its environment before running any health checks:
 1. Confirms execution as root
-2. Verifies `jq` is installed
+2. Verifies JSON tooling is available; prefers `jq` when installed and otherwise falls back to JXA / pure-Zsh helpers
 3. Checks for swiftDialog ≥ 3.0.1.4955 (installs from GitHub if missing)
 4. Kills any existing swiftDialog instances
 
@@ -145,7 +146,7 @@ The script inspects installed configuration profiles to identify the MDM vendor,
 
 ### Runtime Execution
 
-Health checks execute sequentially, with each result posted to the swiftDialog dialog via a named pipe (`dialogUpdate`). When Dock integration is enabled, non-`Silent` runs also show a Dock icon with a decreasing badge count. Checks report one of four statuses: **pass**, **warning**, **error**, or **skipped**. After all checks complete, a final summary dialog appears with a countdown timer, and non-`Silent` runs with failures also trigger a persistent swiftDialog pseudo-alert notification.
+Health checks execute sequentially, with each result posted to the swiftDialog dialog via a named pipe (`dialogUpdate`) and captured into a structured per-check result collector for final reporting. When Dock integration is enabled, non-`Silent` runs also show a Dock icon with a decreasing badge count. After all checks complete, a final summary dialog appears with a countdown timer, non-`Silent` runs with failures also trigger a persistent swiftDialog pseudo-alert notification, and version `4.0.0b1` writes a final JSON health report before cleanup.
 
 ---
 

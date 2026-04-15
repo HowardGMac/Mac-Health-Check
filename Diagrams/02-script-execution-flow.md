@@ -1,6 +1,6 @@
 # Mac Health Check: Script Execution Flow
 
-This flowchart documents the `3.2.0` decision logic executed each time Mac Health Check runs, from the initial invocation through pre-flight validation, health check execution, and final output.
+This flowchart documents the `4.0.0b1` decision logic executed each time Mac Health Check runs, from the initial invocation through pre-flight validation, health check execution, and final output.
 
 ```mermaid
 graph TB
@@ -188,7 +188,7 @@ Set via MDM policy parameter. Determines UI behavior and which checks execute. T
 The script must run as root. If not, it calls `fatal()` and exits immediately with a log entry.
 
 ### 3. jq Availability
-The `jq` JSON processor is required for building the swiftDialog JSON payload. The script exits with a fatal error if not found.
+The script prefers `jq` for JSON validation and formatting, but `4.0.0b1` falls back to JXA / pure-Zsh helpers when `jq` is unavailable.
 
 ### 4. swiftDialog Version
 The script requires swiftDialog ≥ 3.0.1.4955. If the installed version is older (or swiftDialog is absent), the script downloads and installs the latest release from GitHub before proceeding.
@@ -209,7 +209,10 @@ Each health check function returns one of four statuses posted to swiftDialog vi
 ### 8. Webhook Delivery
 If `webhookURL` (Parameter 5) is populated and failures are detected, `quitScript()` posts a JSON payload to Microsoft Teams or Slack summarizing failed checks. The payload auto-detects the webhook type from the URL.
 
-### 9. Failure Notification
+### 9. JSON Report + Splunk Delivery
+At the end of the run, `generateAndSendSplunkReport()` writes a structured local JSON report and, when `splunkOperationMode=production` plus Parameters 7 and 8 are configured, optionally delivers a Splunk HEC envelope. `splunkOperationMode=off` or `test` still generates the report but skips network transmission.
+
+### 10. Failure Notification
 When non-`Silent` runs detect failures, `displayFailureNotification()` launches a persistent swiftDialog pseudo-alert summarizing the failed health checks and offering a support action link.
 
 ---

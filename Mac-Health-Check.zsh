@@ -17,24 +17,15 @@
 #
 # HISTORY
 #
-# Version 3.2.0, 02-Apr-2026, Dan K. Snelson (@dan-snelson)
-#   - Preserve user-provided local `organizationOverlayiconURL` files by downloading remote overlay
-#     icons to a per-run temp path and only removing that script-managed asset during cleanup. (Thanks for the heads-up, @brian_b!)
-#   - Synced DDM OS enforcement detection in `checkAvailableSoftwareUpdates()` with newer
-#     [DDM OS Reminder](https://github.com/dan-snelson/DDM-OS-Reminder) corrections: prefer the
-#     newest trustworthy declaration timestamp, recognize currently applicable declarations, and
-#     use future padded enforcement deadlines when valid.
-#   - Updated Jamf Pro Cloud & On-prem Endpoints (Pull Request #83; thanks for yet another one, @HowardGMac!)
-#   - Fix: SSO checks report 'not configured' instead of 'NOT logged in' when SSO type is absent (Pull Request #82; thanks for yet another one, @bigdoodr!)
-#   - Updated `checkFreeDiskSpace()` to prefer Finder-aligned available capacity via `NSURLVolumeAvailableCapacityForImportantUsageKey`, improving visibility of purgeable space such as local Time Machine snapshots and iCloud-managed capacity (thanks for the cross-project [Pull Request](https://github.com/dan-snelson/DDM-OS-Reminder/pull/80), @huexley!)
-#   - Added `displayFailureNotification` function to present a `--notification --style pseudo-alert`
-#     (swiftDialog 3.1.0.4970) summary of failed health checks when failures are detected
-#   - Hardened Jamf Pro inventory submission to only send `-endUsername` when a valid SSO username
-#     is available, preventing `"NOT logged in"` placeholder values from being submitted in non-PSSO
-#     environments, and added explicit inventory notices that log whether `-endUsername` was used
-#     plus its source (Kerberos SSOe, Platform SSOe, or None) and resolved value (`<empty>` when not used).
-#     Issue #81; sorry for any Dan-induced headaches, @tonyyo11!
-#   - Refactored `checkOS()` to better handle beta versions vs. Background Security Improvement versions
+# Version 4.0.0b1, 15-Apr-2026, Dan K. Snelson (@dan-snelson)
+#   - Added secure JSON health reporting with optional Splunk HTTP Event Collector (HEC) delivery
+#   - Added per-check structured result collection and centralized final health-status calculation
+#   - Added local JSON report persistence with validation, pretty-print debug mode, and root-only permissions
+#   - Added jq-optional JSON helper fallbacks for validation, formatting, and dialog/listitem merging
+#   - Added `splunkOperationMode`, `splunkHECURL`, `splunkHECToken`, `customReportFieldsJSON`
+#     and `reportDebug` parameters for enterprise reporting workflows
+#   - Preserved existing swiftDialog, webhook, health-check, and MDM-specific behavior while
+#     allowing Splunk/reporting failures to degrade gracefully
 #
 ####################################################################################################
 
@@ -49,7 +40,7 @@
 export PATH=/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin/
 
 # Script Version
-scriptVersion="3.2.0"
+scriptVersion="4.0.0b1"
 
 # Client-side Log
 scriptLog="/var/log/org.churchofjesuschrist.log"
@@ -80,6 +71,22 @@ operationMode="${4:-"Self Service"}"
 
 # Parameter 5: Microsoft Teams or Slack Webhook URL [ Leave blank to disable (default) | https://microsoftTeams.webhook.com/URL | https://hooks.slack.com/services/URL ]
 webhookURL="${5:-""}"
+
+# === NEW IN 4.0.0b1 ===
+# Parameter 6: Splunk reporting mode [ off | test | production ]
+splunkOperationMode="${6:-"test"}"
+
+# Parameter 7: Splunk HEC URL [ Leave blank to disable (default) | https://splunk.example.com:8088/services/collector ]
+splunkHECURL="${7:-""}"
+
+# Parameter 8: Splunk HEC Token [ Leave blank to disable (default) ]
+splunkHECToken="${8:-""}"
+
+# Parameter 9: Custom JSON fields object to merge into the report's `customFields`
+customReportFieldsJSON="${9:-""}"
+
+# Parameter 10: Reporting debug mode [ true | false ]
+reportDebug="${10:-"true"}"
 
 
 
@@ -171,6 +178,75 @@ excessiveUptimeAlertStyle="warning"
 
 # Completion Timer (in seconds)
 completionTimer="60"
+
+# === NEW IN 4.0.0b1 ===
+# Splunk and JSON reporting defaults
+splunkJSONReportPath="/var/tmp/MacHealthCheck-Report.json"
+splunkPrettyPrintJSON="false"
+splunkReportDebug="false"
+splunkAllowInsecureTLS="false"
+splunkHECSource="Mac-Health-Check.zsh"
+splunkHECSourcetype="mac_health_check:json"
+customFieldsJSON="{}"
+
+# Result-collection defaults
+reportingErrorCount=0
+reportingErrors=""
+reportGenerated="false"
+reportTransmissionStatus="not_configured"
+reportTransmissionHttpCode=""
+reportTransmissionAttemptCount="0"
+reportOverallStatus="healthy"
+reportTimestamp=""
+reportTimestampEpoch=""
+reportFilePayload=""
+reportHECPayload=""
+reportJSONTool="zsh"
+exitCode="0"
+overallHealth=""
+errorCount="0"
+currentTimeEpoch=$(date +%s)
+
+typeset -A checkTitleByIndex
+typeset -A checkKeyByIndex
+typeset -A checkNormalizedStatusByIndex
+typeset -A checkStatustextByIndex
+typeset -A checkMessageByIndex
+typeset -A checkRemediationByIndex
+typeset -A checkExecutedByIndex
+typeset -A checkIndexByTitle
+
+typeset -a reportHealthyChecks
+typeset -a reportWarningChecks
+typeset -a reportFailChecks
+typeset -a reportErrorChecks
+
+case "${splunkOperationMode:l}" in
+    "off" )
+        splunkOperationMode="off"
+        ;;
+    "test" )
+        splunkOperationMode="test"
+        ;;
+    * )
+        splunkOperationMode="production"
+        ;;
+esac
+
+case "${reportDebug:l}" in
+    "true" | "1" | "yes" | "y" )
+        splunkReportDebug="true"
+        splunkPrettyPrintJSON="true"
+        ;;
+    * )
+        splunkReportDebug="false"
+        ;;
+esac
+
+if [[ "${operationMode}" == "Debug" ]]; then
+    splunkReportDebug="true"
+    splunkPrettyPrintJSON="true"
+fi
 
 
 
@@ -282,9 +358,13 @@ osMajorVersion=$( echo "${osVersion}" | awk -F '.' '{print $1}' )
 osMinorVersion=$( echo "${osVersion}" | awk -F '.' '{print $2}' )
 if [[ -n $osVersionExtra ]] && [[ "${osMajorVersion}" -ge 13 ]]; then osVersion="${osVersion} ${osVersionExtra}"; fi
 serialNumber=$( ioreg -rd1 -c IOPlatformExpertDevice | awk -F'"' '/IOPlatformSerialNumber/{print $4}' )
+hardwareUUID=$( ioreg -rd1 -c IOPlatformExpertDevice | awk -F'"' '/IOPlatformUUID/{print $4}' )
 computerName=$( scutil --get ComputerName | sed 's/’//' )
 computerModel=$( sysctl -n hw.model )
 localHostName=$( scutil --get LocalHostName )
+hostName=$( scutil --get HostName 2>/dev/null )
+[[ -z "${hostName}" ]] && hostName="${localHostName}"
+[[ -z "${hostName}" ]] && hostName="$( hostname )"
 systemMemory="$(( $(sysctl -n hw.memsize) / $((1024**3)) )) GB"
 rawStorage=$(( $(/usr/sbin/diskutil info / | grep "Container Total Space" | awk '{print $6}' | sed 's/(//g') / $((1000**3)) ))
 if [[ $rawStorage -ge 1998 ]]; then
@@ -781,6 +861,84 @@ supportValue6=""
 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# JSON Helpers
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+function validateJson() {
+
+    local jsonPayload="${1}"
+
+    if command -v jq >/dev/null 2>&1; then
+        printf '%s' "${jsonPayload}" | jq . >/dev/null 2>&1
+    else
+        JSON_INPUT="${jsonPayload}" osascript -l JavaScript \
+            -e 'const env = $.NSProcessInfo.processInfo.environment.objectForKey("JSON_INPUT"); JSON.parse(ObjC.unwrap(env));' \
+            >/dev/null 2>&1
+    fi
+
+}
+
+function compactJson() {
+
+    local jsonPayload="${1}"
+
+    if command -v jq >/dev/null 2>&1; then
+        printf '%s' "${jsonPayload}" | jq -c .
+    else
+        JSON_INPUT="${jsonPayload}" osascript -l JavaScript \
+            -e 'const env = $.NSProcessInfo.processInfo.environment.objectForKey("JSON_INPUT"); const parsed = JSON.parse(ObjC.unwrap(env)); JSON.stringify(parsed);'
+    fi
+
+}
+
+function prettyPrintJson() {
+
+    local jsonPayload="${1}"
+
+    if command -v jq >/dev/null 2>&1; then
+        printf '%s' "${jsonPayload}" | jq .
+    else
+        JSON_INPUT="${jsonPayload}" osascript -l JavaScript \
+            -e 'const env = $.NSProcessInfo.processInfo.environment.objectForKey("JSON_INPUT"); const parsed = JSON.parse(ObjC.unwrap(env)); JSON.stringify(parsed, null, 2);'
+    fi
+
+}
+
+function jsonIsObject() {
+
+    local jsonPayload="${1}"
+    local objectCheck=""
+
+    objectCheck="$(
+        JSON_INPUT="${jsonPayload}" osascript -l JavaScript \
+            -e 'const env = $.NSProcessInfo.processInfo.environment.objectForKey("JSON_INPUT"); const parsed = JSON.parse(ObjC.unwrap(env)); (parsed && typeof parsed === "object" && !Array.isArray(parsed)) ? "true" : "false";' \
+            2>/dev/null
+    )"
+
+    [[ "${objectCheck}" == "true" ]]
+
+}
+
+function mergeDialogAndListItems() {
+
+    local dialogJSON="${1}"
+    local listitemJSON="${2}"
+
+    if command -v jq >/dev/null 2>&1; then
+        jq -n --argjson dialog "${dialogJSON}" --argjson listitems "${listitemJSON}" '$dialog + { "listitem": $listitems }'
+    else
+        JSON_DIALOG="${dialogJSON}" JSON_LISTITEMS="${listitemJSON}" osascript -l JavaScript \
+            -e 'const env = $.NSProcessInfo.processInfo.environment;' \
+            -e 'const dialog = JSON.parse(ObjC.unwrap(env.objectForKey("JSON_DIALOG")));' \
+            -e 'const listitems = JSON.parse(ObjC.unwrap(env.objectForKey("JSON_LISTITEMS")));' \
+            -e 'dialog.listitem = listitems; JSON.stringify(dialog);'
+    fi
+
+}
+
+
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # Help Message Variables
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
@@ -888,7 +1046,7 @@ mainDialogJSON='
 '
 
 # Validate mainDialogJSON is valid JSON
-if ! echo "$mainDialogJSON" | jq . >/dev/null 2>&1; then
+if ! validateJson "${mainDialogJSON}"; then
   echo "Error: mainDialogJSON is invalid JSON"
   echo "$mainDialogJSON"
   exit 1
@@ -935,7 +1093,7 @@ addigyMdmListitemJSON='
 ]
 '
 # Validate addigyMdmListitemJSON is valid JSON
-if ! echo "$addigyMdmListitemJSON" | jq . >/dev/null 2>&1; then
+if ! validateJson "${addigyMdmListitemJSON}"; then
   echo "Error: addigyMdmListitemJSON is invalid JSON"
   echo "$addigyMdmListitemJSON"
   exit 1
@@ -981,7 +1139,7 @@ filewaveMdmListitemJSON='
 ]
 '
 # Validate filewaveMdmListitemJSON is valid JSON
-if ! echo "$filewaveMdmListitemJSON" | jq . >/dev/null 2>&1; then
+if ! validateJson "${filewaveMdmListitemJSON}"; then
   echo "Error: filewaveMdmListitemJSON is invalid JSON"
   echo "$filewaveMdmListitemJSON"
   exit 1
@@ -1028,7 +1186,7 @@ fleetMdmListitemJSON='
 ]
 '
 # Validate fleetMdmListitemJSON is valid JSON
-if ! echo "$fleetMdmListitemJSON" | jq . >/dev/null 2>&1; then
+if ! validateJson "${fleetMdmListitemJSON}"; then
   echo "Error: fleetMdmListitemJSON is invalid JSON"
   echo "$fleetMdmListitemJSON"
   exit 1
@@ -1075,7 +1233,7 @@ kandjiMdmListitemJSON='
 ]
 '
 # Validate kandjiMdmListitemJSON is valid JSON
-if ! echo "$kandjiMdmListitemJSON" | jq . >/dev/null 2>&1; then
+if ! validateJson "${kandjiMdmListitemJSON}"; then
   echo "Error: kandjiMdmListitemJSON is invalid JSON"
   echo "$kandjiMdmListitemJSON"
   exit 1
@@ -1130,7 +1288,7 @@ jamfProListitemJSON='
 '
 
 # Validate jamfProListitemJSON is valid JSON
-if ! echo "$jamfProListitemJSON" | jq . >/dev/null 2>&1; then
+if ! validateJson "${jamfProListitemJSON}"; then
   echo "Error: jamfProListitemJSON is invalid JSON"
   echo "$jamfProListitemJSON"
   exit 1
@@ -1178,7 +1336,7 @@ jumpcloudMdmListitemJSON='
 '
 
 # Validate jumpcloudMdmListitemJSON is valid JSON
-if ! echo "$jumpcloudMdmListitemJSON" | jq . >/dev/null 2>&1; then
+if ! validateJson "${jumpcloudMdmListitemJSON}"; then
   echo "Error: jumpcloudMdmListitemJSON is invalid JSON"
   echo "$jumpcloudMdmListitemJSON"
   exit 1
@@ -1226,7 +1384,7 @@ microsoftMdmListitemJSON='
 '
 
 # Validate microsoftMdmListitemJSON is valid JSON
-if ! echo "$microsoftMdmListitemJSON" | jq . >/dev/null 2>&1; then
+if ! validateJson "${microsoftMdmListitemJSON}"; then
   echo "Error: microsoftMdmListitemJSON is invalid JSON"
   echo "$microsoftMdmListitemJSON"
   exit 1
@@ -1275,7 +1433,7 @@ mosyleListitemJSON='
 '
 
 # Validate mosyleListitemJSON is valid JSON
-if ! echo "$mosyleListitemJSON" | jq . >/dev/null 2>&1; then
+if ! validateJson "${mosyleListitemJSON}"; then
   echo "Error: mosyletitemJSON is invalid JSON"
   echo "$mosyleListitemJSON"
   exit 1
@@ -1319,7 +1477,7 @@ genericMdmListitemJSON='
 '
 
 # Validate genericMdmListitemJSON is valid JSON
-if ! echo "$genericMdmListitemJSON" | jq . >/dev/null 2>&1; then
+if ! validateJson "${genericMdmListitemJSON}"; then
   echo "Error: genericMdmListitemJSON is invalid JSON"
   echo "$genericMdmListitemJSON"
   exit 1
@@ -1489,46 +1647,40 @@ function prepareDockNamedDialogApp() {
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 function dialogUpdate(){
-    if [[ "${operationMode}" != "Silent" ]]; then
-        local dialogCommand="${1}"
-        local listItemIndexRaw=""
-        local listItemIndex=""
-        local listItemStatusRaw=""
-        local listItemStatus=""
+    local dialogCommand="${1}"
+    local listItemIndex=""
+    local listItemStatus=""
 
+    if [[ "${dialogCommand}" == listitem:* ]]; then
+        listItemIndex="$( getDialogListItemIndex "${dialogCommand}" )"
+        listItemStatus="$( getDialogListItemStatus "${dialogCommand}" )"
+
+        if [[ -n "${listItemIndex}" ]] && [[ -n "${listItemStatus}" ]] && [[ "${listItemStatus}" != "wait" ]] && [[ "${listItemStatus}" != "pending" ]]; then
+            recordHealthCheckResult "${listItemIndex}" "${dialogCommand}"
+        fi
+    fi
+
+    if [[ "${operationMode}" != "Silent" ]]; then
         sleep 0.3
         echo "${dialogCommand}" >> "${dialogCommandFile}"
 
         # Track check completion from listitem status transitions and update dock badge.
-        if [[ "${dialogCommand}" == listitem:* ]]; then
-            listItemIndexRaw="${dialogCommand#*index: }"
-            listItemIndex="${listItemIndexRaw%%,*}"
-            listItemIndex="${listItemIndex//[^0-9]/}"
-
-            listItemStatusRaw="${dialogCommand#*status: }"
-            listItemStatus="${listItemStatusRaw%%,*}"
-            listItemStatus="${listItemStatus//[[:space:]]/}"
-            listItemStatus="${listItemStatus:l}"
-
+        if [[ -n "${listItemIndex}" ]] && [[ -n "${listItemStatus}" ]] && [[ "${listItemStatus}" != "wait" ]] && [[ "${listItemStatus}" != "pending" ]]; then
             if [[ "${remainingChecks}" != <-> ]]; then
                 remainingChecks="0"
             fi
 
-            if [[ -n "${listItemIndex}" ]] && [[ -n "${listItemStatus}" ]] && [[ "${listItemStatus}" != "wait" ]]; then
-                if [[ "${completedCheckIndicesCsv}" != *",${listItemIndex},"* ]]; then
-                    completedCheckIndicesCsv="${completedCheckIndicesCsv}${listItemIndex},"
-                    (( remainingChecks > 0 )) && (( remainingChecks-- ))
+            if [[ "${completedCheckIndicesCsv}" != *",${listItemIndex},"* ]]; then
+                completedCheckIndicesCsv="${completedCheckIndicesCsv}${listItemIndex},"
+                (( remainingChecks > 0 )) && (( remainingChecks-- ))
 
-                    if (( remainingChecks > 0 )); then
-                        writeDockBadge "${remainingChecks}"
-                    else
-                        writeDockBadge "remove"
-                    fi
+                if (( remainingChecks > 0 )); then
+                    writeDockBadge "${remainingChecks}"
+                else
+                    writeDockBadge "remove"
                 fi
             fi
         fi
-    else
-        # info "Operation Mode is 'Silent'; not updating dialog."
     fi
 }
 
@@ -1555,6 +1707,688 @@ function get_json_value() {
     JSON="$1" osascript -l 'JavaScript' \
         -e 'const env = $.NSProcessInfo.processInfo.environment.objectForKey("JSON").js' \
         -e "JSON.parse(env).$2"
+}
+
+
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# === NEW IN 4.0.0b1 ===
+# Result-collection Helpers
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+function sanitizeCheckKey() {
+
+    local rawValue="${1:l}"
+
+    rawValue="${rawValue//[^a-z0-9]/_}"
+    rawValue="${rawValue//__/_}"
+    rawValue="${rawValue##_}"
+    rawValue="${rawValue%%_}"
+    [[ -z "${rawValue}" ]] && rawValue="check"
+
+    echo "${rawValue}"
+
+}
+
+function getDialogListItemIndex() {
+
+    local dialogCommand="${1}"
+    local listItemIndexRaw=""
+    local listItemIndex=""
+
+    listItemIndexRaw="${dialogCommand#*index: }"
+    listItemIndex="${listItemIndexRaw%%,*}"
+    listItemIndex="${listItemIndex//[^0-9]/}"
+
+    echo "${listItemIndex}"
+
+}
+
+function getDialogListItemStatus() {
+
+    local dialogCommand="${1}"
+    local listItemStatusRaw=""
+    local listItemStatus=""
+
+    if [[ "${dialogCommand}" != *"status: "* ]]; then
+        echo ""
+        return
+    fi
+
+    listItemStatusRaw="${dialogCommand#*status: }"
+    listItemStatus="${listItemStatusRaw%%,*}"
+    listItemStatus="${listItemStatus//[[:space:]]/}"
+    listItemStatus="${listItemStatus:l}"
+
+    echo "${listItemStatus}"
+
+}
+
+function getDialogListItemStatustext() {
+
+    local dialogCommand="${1}"
+    local statustext=""
+
+    if [[ "${dialogCommand}" != *"statustext: "* ]]; then
+        echo ""
+        return
+    fi
+
+    statustext="${dialogCommand#*statustext: }"
+    echo "${statustext}"
+
+}
+
+function getDialogListItemSubtitle() {
+
+    local dialogCommand="${1}"
+    local subtitle=""
+
+    if [[ "${dialogCommand}" != *"subtitle: "* ]]; then
+        echo ""
+        return
+    fi
+
+    subtitle="${dialogCommand#*subtitle: }"
+    subtitle="${subtitle%%, status:*}"
+    echo "${subtitle}"
+
+}
+
+function normalizeCheckStatus() {
+
+    case "${1:l}" in
+        "success" )
+            echo "healthy"
+            ;;
+        "error" )
+            echo "warning"
+            ;;
+        "fail" )
+            echo "fail"
+            ;;
+        "warning" )
+            echo "warning"
+            ;;
+        "healthy" | "error_internal" )
+            echo "${1:l}"
+            ;;
+        * )
+            echo "error"
+            ;;
+    esac
+
+}
+
+function recordHealthCheckResult() {
+
+    local listItemIndex="${1}"
+    local dialogCommand="${2}"
+    local title="${checkTitleByIndex[${listItemIndex}]}"
+    local normalizedStatus=""
+    local statusText=""
+    local remediationText=""
+    local messageText=""
+
+    [[ -z "${title}" ]] && title="Check ${listItemIndex}"
+    [[ -z "${checkKeyByIndex[${listItemIndex}]}" ]] && checkKeyByIndex[${listItemIndex}]="$( sanitizeCheckKey "${title}" )"
+
+    normalizedStatus="$( normalizeCheckStatus "$( getDialogListItemStatus "${dialogCommand}" )" )"
+    statusText="$( getDialogListItemStatustext "${dialogCommand}" )"
+    remediationText="$( getDialogListItemSubtitle "${dialogCommand}" )"
+    messageText="${remediationText:-${statusText}}"
+
+    if [[ "${messageText}" == "${organizationBoilerplateComplianceMessage}" ]] && [[ -n "${statusText}" ]]; then
+        messageText="${statusText}"
+    fi
+
+    checkNormalizedStatusByIndex[${listItemIndex}]="${normalizedStatus}"
+    checkStatustextByIndex[${listItemIndex}]="${statusText}"
+    checkRemediationByIndex[${listItemIndex}]="${remediationText}"
+    checkMessageByIndex[${listItemIndex}]="${messageText}"
+    checkExecutedByIndex[${listItemIndex}]="true"
+    checkIndexByTitle[${title}]="${listItemIndex}"
+
+}
+
+function initializeCheckMetadataFromCombinedJSON() {
+
+    local title=""
+
+    for (( i=0; i<listitemLength; i++ )); do
+        title="$( get_json_value "${combinedJSON}" "listitem[${i}].title" 2>/dev/null )"
+        [[ -z "${title}" ]] && title="Check ${i}"
+        checkTitleByIndex[${i}]="${title}"
+        checkKeyByIndex[${i}]="$( sanitizeCheckKey "${title}" )"
+        checkIndexByTitle[${title}]="${i}"
+    done
+
+}
+
+function rebuildResultBuckets() {
+
+    reportHealthyChecks=()
+    reportWarningChecks=()
+    reportFailChecks=()
+    reportErrorChecks=()
+
+    for (( i=0; i<listitemLength; i++ )); do
+        if [[ "${checkExecutedByIndex[${i}]}" == "true" ]]; then
+            case "${checkNormalizedStatusByIndex[${i}]}" in
+                "healthy" )
+                    reportHealthyChecks+=( "${checkTitleByIndex[${i}]}" )
+                    ;;
+                "warning" )
+                    reportWarningChecks+=( "${checkTitleByIndex[${i}]}" )
+                    ;;
+                "fail" )
+                    reportFailChecks+=( "${checkTitleByIndex[${i}]}" )
+                    ;;
+                * )
+                    reportErrorChecks+=( "${checkTitleByIndex[${i}]}" )
+                    ;;
+            esac
+        fi
+    done
+
+}
+
+function rebuildOverallHealthFromRecordedResults() {
+
+    overallHealth=""
+    rebuildResultBuckets
+
+    for (( i=0; i<listitemLength; i++ )); do
+        if [[ "${checkExecutedByIndex[${i}]}" == "true" ]] && [[ "${checkNormalizedStatusByIndex[${i}]}" != "healthy" ]]; then
+            overallHealth+="${checkTitleByIndex[${i}]}; "
+        fi
+    done
+
+}
+
+function addReportingError() {
+
+    local messageText="${1}"
+
+    (( reportingErrorCount++ ))
+    if [[ -n "${reportingErrors}" ]]; then
+        reportingErrors+="; ${messageText}"
+    else
+        reportingErrors="${messageText}"
+    fi
+
+    warning "Splunk Reporting: ${messageText}"
+
+}
+
+function calculateOverallReportStatus() {
+
+    rebuildResultBuckets
+
+    if (( reportingErrorCount > 0 )) || (( ${#reportErrorChecks[@]} > 0 )); then
+        reportOverallStatus="error"
+    elif (( ${#reportFailChecks[@]} > 0 )); then
+        reportOverallStatus="fail"
+    elif (( ${#reportWarningChecks[@]} > 0 )); then
+        reportOverallStatus="warning"
+    else
+        reportOverallStatus="healthy"
+    fi
+
+}
+
+function getCheckRawValueByTitle() {
+
+    local title="${1}"
+    local index="${checkIndexByTitle[${title}]}"
+
+    echo "${checkStatustextByIndex[${index}]}"
+
+}
+
+function getCheckMessageByTitle() {
+
+    local title="${1}"
+    local index="${checkIndexByTitle[${title}]}"
+
+    echo "${checkMessageByIndex[${index}]}"
+
+}
+
+function getCheckStatusByTitle() {
+
+    local title="${1}"
+    local index="${checkIndexByTitle[${title}]}"
+
+    echo "${checkNormalizedStatusByIndex[${index}]}"
+
+}
+
+
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# === NEW IN 4.0.0b1 ===
+# Splunk Reporting Helpers
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+function jsonEscape() {
+
+    local escapedValue="${1}"
+
+    escapedValue="${escapedValue//\\/\\\\}"
+    escapedValue="${escapedValue//\"/\\\"}"
+    escapedValue="${escapedValue//$'\n'/\\n}"
+    escapedValue="${escapedValue//$'\r'/\\r}"
+    escapedValue="${escapedValue//$'\t'/\\t}"
+    escapedValue="${escapedValue//$'\f'/\\f}"
+    escapedValue="${escapedValue//$'\b'/\\b}"
+
+    printf '%s' "${escapedValue}"
+
+}
+
+function jsonString() {
+    printf '"%s"' "$( jsonEscape "${1}" )"
+}
+
+function buildJSONStringArray() {
+
+    local values=( "$@" )
+    local arrayJSON="["
+    local separator=""
+
+    for value in "${values[@]}"; do
+        arrayJSON+="${separator}$( jsonString "${value}" )"
+        separator=","
+    done
+
+    arrayJSON+="]"
+    printf '%s' "${arrayJSON}"
+
+}
+
+function generateReportTimestamp() {
+
+    reportTimestampEpoch="$( date +%s )"
+    reportTimestamp="$( date '+%Y-%m-%dT%H:%M:%S%z' | sed -E 's/(..)$/:\1/' )"
+
+}
+
+function buildChecksJSONArray() {
+
+    local checksJSON="["
+    local separator=""
+    local title=""
+    local key=""
+    local normalizedStatus=""
+    local message=""
+    local rawValue=""
+    local remediation=""
+
+    for (( i=0; i<listitemLength; i++ )); do
+        if [[ "${checkExecutedByIndex[${i}]}" == "true" ]]; then
+            title="${checkTitleByIndex[${i}]}"
+            key="${checkKeyByIndex[${i}]}"
+            normalizedStatus="${checkNormalizedStatusByIndex[${i}]}"
+            message="${checkMessageByIndex[${i}]}"
+            rawValue="${checkStatustextByIndex[${i}]}"
+            remediation="${checkRemediationByIndex[${i}]}"
+
+            checksJSON+="${separator}{"
+            checksJSON+="\"index\":${i},"
+            checksJSON+="\"key\":$( jsonString "${key}" ),"
+            checksJSON+="\"name\":$( jsonString "${title}" ),"
+            checksJSON+="\"status\":$( jsonString "${normalizedStatus}" ),"
+            checksJSON+="\"message\":$( jsonString "${message}" ),"
+            checksJSON+="\"rawValue\":$( jsonString "${rawValue}" ),"
+            checksJSON+="\"remediation\":$( jsonString "${remediation}" )"
+            checksJSON+="}"
+            separator=","
+        fi
+    done
+
+    checksJSON+="]"
+    printf '%s' "${checksJSON}"
+
+}
+
+function buildMacHealthReportJSON() {
+
+    local mdmProfileTitle="${mdmVendor} MDM Profile"
+    local mdmCertificateTitle="${mdmVendor} MDM Certificate Expiration"
+    local mdmProfileStatus="not_run"
+    local mdmProfileResult=""
+    local mdmCertificateResult=""
+    local mdmLastCheckIn=""
+    local mdmLastInventory=""
+    local apnsResult=""
+    local lastRebootResult=""
+    local fileVaultResult=""
+    local diskSpaceResult=""
+    local sipResult=""
+    local ssvResult=""
+    local firewallResult=""
+    local checksJSON=""
+    local metadataJSON=""
+    local summaryJSON=""
+    local systemInfoJSON=""
+    local mdmJSON=""
+    local -a reportingErrorItems
+
+    if [[ -n "${reportingErrors}" ]]; then
+        reportingErrorItems=( "${(@s/; /)reportingErrors}" )
+    else
+        reportingErrorItems=()
+    fi
+
+    if [[ "${mdmVendor}" != "None" ]]; then
+        mdmProfileStatus="$( getCheckStatusByTitle "${mdmProfileTitle}" )"
+        mdmProfileResult="$( getCheckRawValueByTitle "${mdmProfileTitle}" )"
+        mdmCertificateResult="$( getCheckRawValueByTitle "${mdmCertificateTitle}" )"
+    fi
+
+    apnsResult="$( getCheckRawValueByTitle "Apple Push Notification service" )"
+    lastRebootResult="$( getCheckRawValueByTitle "Last Reboot" )"
+    fileVaultResult="$( getCheckRawValueByTitle "FileVault Encryption" )"
+    diskSpaceResult="$( getCheckRawValueByTitle "Free Disk Space" )"
+    sipResult="$( getCheckRawValueByTitle "System Integrity Protection" )"
+    ssvResult="$( getCheckRawValueByTitle "Signed System Volume" )"
+    firewallResult="$( getCheckRawValueByTitle "Firewall" )"
+
+    case "${mdmVendor}" in
+        "Jamf Pro" )
+            mdmLastCheckIn="$( getCheckRawValueByTitle "Jamf Pro Check-In" )"
+            mdmLastInventory="$( getCheckRawValueByTitle "Jamf Pro Inventory" )"
+            ;;
+        "Mosyle" )
+            mdmLastCheckIn="$( getCheckRawValueByTitle "Mosyle Check-In" )"
+            ;;
+    esac
+
+    checksJSON="$( buildChecksJSONArray )"
+
+    metadataJSON="{"
+    metadataJSON+="\"scriptVersion\":$( jsonString "${scriptVersion}" ),"
+    metadataJSON+="\"timestamp\":$( jsonString "${reportTimestamp}" ),"
+    metadataJSON+="\"hostname\":$( jsonString "${hostName}" ),"
+    metadataJSON+="\"localHostName\":$( jsonString "${localHostName}" ),"
+    metadataJSON+="\"serialNumber\":$( jsonString "${serialNumber}" ),"
+    metadataJSON+="\"hardwareUUID\":$( jsonString "${hardwareUUID}" ),"
+    metadataJSON+="\"operationMode\":$( jsonString "${operationMode}" ),"
+    metadataJSON+="\"reportingMode\":$( jsonString "${splunkOperationMode}" ),"
+    metadataJSON+="\"jsonTool\":$( jsonString "${reportJSONTool}" )"
+    metadataJSON+="}"
+
+    summaryJSON="{"
+    summaryJSON+="\"overallStatus\":$( jsonString "${reportOverallStatus}" ),"
+    summaryJSON+="\"healthyCount\":${#reportHealthyChecks[@]},"
+    summaryJSON+="\"warningCount\":${#reportWarningChecks[@]},"
+    summaryJSON+="\"failCount\":${#reportFailChecks[@]},"
+    summaryJSON+="\"errorCount\":$(( ${#reportErrorChecks[@]} + reportingErrorCount )),"
+    summaryJSON+="\"elapsedSeconds\":${SECONDS},"
+    summaryJSON+="\"warningChecks\":$( buildJSONStringArray "${reportWarningChecks[@]}" ),"
+    summaryJSON+="\"failedChecks\":$( buildJSONStringArray "${reportFailChecks[@]}" ),"
+    summaryJSON+="\"reportingErrors\":$( buildJSONStringArray "${reportingErrorItems[@]}" )"
+    summaryJSON+="}"
+
+    systemInfoJSON="{"
+    systemInfoJSON+="\"computerName\":$( jsonString "${computerName}" ),"
+    systemInfoJSON+="\"computerModel\":$( jsonString "${computerModel}" ),"
+    systemInfoJSON+="\"macOSVersion\":$( jsonString "${osVersion}" ),"
+    systemInfoJSON+="\"macOSBuild\":$( jsonString "${osBuild}" ),"
+    systemInfoJSON+="\"systemMemory\":$( jsonString "${systemMemory}" ),"
+    systemInfoJSON+="\"systemStorage\":$( jsonString "${systemStorage}" ),"
+    systemInfoJSON+="\"totalDiskBytes\":${totalDiskBytes:-0},"
+    systemInfoJSON+="\"freeDiskSpace\":$( jsonString "${diskSpaceResult}" ),"
+    systemInfoJSON+="\"lastReboot\":$( jsonString "${lastRebootResult}" ),"
+    systemInfoJSON+="\"sipStatus\":$( jsonString "${sipResult:-${bootPoliciesSipStatus}}" ),"
+    systemInfoJSON+="\"signedSystemVolumeStatus\":$( jsonString "${ssvResult:-${bootPoliciesSsvStatus}}" ),"
+    systemInfoJSON+="\"firewallStatus\":$( jsonString "${firewallResult}" ),"
+    systemInfoJSON+="\"fileVaultStatus\":$( jsonString "${fileVaultResult}" ),"
+    systemInfoJSON+="\"ssid\":$( jsonString "${ssid}" ),"
+    systemInfoJSON+="\"activeIPAddress\":$( jsonString "${activeIPAddress//\*\*/}" ),"
+    systemInfoJSON+="\"vpnStatus\":$( jsonString "${vpnStatus} ${vpnExtendedStatus}" ),"
+    systemInfoJSON+="\"networkTimeServer\":$( jsonString "${networkTimeServer}" ),"
+    systemInfoJSON+="\"locationServicesStatus\":$( jsonString "${locationServicesStatus}" ),"
+    systemInfoJSON+="\"bootstrapTokenStatus\":$( jsonString "${bootstrapTokenStatus}" ),"
+    systemInfoJSON+="\"sshStatus\":$( jsonString "${sshStatus}" ),"
+    systemInfoJSON+="\"oneDriveSyncDate\":$( jsonString "${oneDriveSyncDate}" ),"
+    systemInfoJSON+="\"apnsStatus\":$( jsonString "${apnsResult}" )"
+    systemInfoJSON+="}"
+
+    mdmJSON="{"
+    mdmJSON+="\"vendor\":$( jsonString "${mdmVendor}" ),"
+    mdmJSON+="\"enrollmentStatus\":$( jsonString "${mdmProfileStatus:-unknown}" ),"
+    mdmJSON+="\"serverURL\":$( jsonString "${serverURL}" ),"
+    mdmJSON+="\"profileResult\":$( jsonString "${mdmProfileResult}" ),"
+    mdmJSON+="\"profileUUID\":$( jsonString "${mdmVendorUuid}" ),"
+    mdmJSON+="\"profileIdentifier\":$( jsonString "${mdmProfileIdentifier}" ),"
+    mdmJSON+="\"certificateExpiration\":$( jsonString "${mdmCertificateResult}" ),"
+    mdmJSON+="\"lastCheckIn\":$( jsonString "${mdmLastCheckIn}" ),"
+    mdmJSON+="\"lastInventory\":$( jsonString "${mdmLastInventory}" ),"
+    mdmJSON+="\"jamfProID\":$( jsonString "${jamfProID}" ),"
+    mdmJSON+="\"jamfProSiteName\":$( jsonString "${jamfProSiteName}" )"
+    mdmJSON+="}"
+
+    printf '%s' "{"
+    printf '%s' "\"metadata\":${metadataJSON},"
+    printf '%s' "\"summary\":${summaryJSON},"
+    printf '%s' "\"systemInfo\":${systemInfoJSON},"
+    printf '%s' "\"mdm\":${mdmJSON},"
+    printf '%s' "\"checks\":${checksJSON},"
+    printf '%s' "\"customFields\":${customFieldsJSON}"
+    printf '%s' "}"
+
+}
+
+function buildFallbackReportJSON() {
+
+    local -a reportingErrorItems
+
+    if [[ -n "${reportingErrors}" ]]; then
+        reportingErrorItems=( "${(@s/; /)reportingErrors}" )
+    else
+        reportingErrorItems=()
+    fi
+
+    printf '%s' "{"
+    printf '%s' "\"metadata\":{"
+    printf '%s' "\"scriptVersion\":$( jsonString "${scriptVersion}" ),"
+    printf '%s' "\"timestamp\":$( jsonString "${reportTimestamp}" ),"
+    printf '%s' "\"hostname\":$( jsonString "${hostName}" ),"
+    printf '%s' "\"serialNumber\":$( jsonString "${serialNumber}" ),"
+    printf '%s' "\"hardwareUUID\":$( jsonString "${hardwareUUID}" ),"
+    printf '%s' "\"operationMode\":$( jsonString "${operationMode}" ),"
+    printf '%s' "\"reportingMode\":$( jsonString "${splunkOperationMode}" )"
+    printf '%s' "},"
+    printf '%s' "\"summary\":{"
+    printf '%s' "\"overallStatus\":\"error\","
+    printf '%s' "\"errorCount\":$(( reportingErrorCount > 0 ? reportingErrorCount : 1 )),"
+    printf '%s' "\"reportingErrors\":$( buildJSONStringArray "${reportingErrorItems[@]}" )"
+    printf '%s' "},"
+    printf '%s' "\"systemInfo\":{},"
+    printf '%s' "\"mdm\":{},"
+    printf '%s' "\"checks\":[],"
+    printf '%s' "\"customFields\":{}"
+    printf '%s' "}"
+
+}
+
+function writeSecureJSONFile() {
+
+    local targetPath="${1}"
+    local jsonPayload="${2}"
+    local previousUmask=""
+
+    previousUmask="$( umask )"
+    umask 077
+    printf '%s\n' "${jsonPayload}" > "${targetPath}"
+    umask "${previousUmask}"
+
+    chmod 600 "${targetPath}" 2>/dev/null
+    if [[ $(id -u) -eq 0 ]]; then
+        chown root:wheel "${targetPath}" 2>/dev/null
+    fi
+
+}
+
+function sanitizeSplunkURLForLog() {
+
+    local sanitizedURL="${1}"
+
+    sanitizedURL="${sanitizedURL%%\?*}"
+    sanitizedURL="${sanitizedURL%%#*}"
+
+    printf '%s' "${sanitizedURL}"
+
+}
+
+function buildSplunkHECPayload() {
+
+    local reportJSON="${1}"
+
+    printf '%s' "{"
+    printf '%s' "\"time\":${reportTimestampEpoch},"
+    printf '%s' "\"host\":$( jsonString "${hostName}" ),"
+    printf '%s' "\"source\":$( jsonString "${splunkHECSource}" ),"
+    printf '%s' "\"sourcetype\":$( jsonString "${splunkHECSourcetype}" ),"
+    printf '%s' "\"event\":${reportJSON}"
+    printf '%s' "}"
+
+}
+
+function sendSplunkHECPayload() {
+
+    local hecPayload="${1}"
+    local payloadFile=""
+    local responseFile=""
+    local sanitizedURL=""
+    local httpCode=""
+    local curlExitCode=0
+    local retryDelay=1
+    local curlArgs=()
+
+    sanitizedURL="$( sanitizeSplunkURLForLog "${splunkHECURL}" )"
+    payloadFile="$( mktemp /var/tmp/mhc-splunk-payload.XXXXXX )"
+    responseFile="$( mktemp /var/tmp/mhc-splunk-response.XXXXXX )"
+
+    writeSecureJSONFile "${payloadFile}" "${hecPayload}"
+
+    if [[ "${splunkAllowInsecureTLS:l}" == "true" ]] && [[ "${splunkReportDebug}" == "true" ]]; then
+        curlArgs+=( --insecure )
+        warning "Splunk Reporting: TLS verification override enabled for debug reporting."
+    fi
+
+    for attempt in 1 2 3; do
+        reportTransmissionAttemptCount="${attempt}"
+        info "Splunk Reporting: POST attempt ${attempt} to ${sanitizedURL}"
+
+        httpCode="$(
+            curl --silent --fail-with-body --max-time 15 \
+                --header "Authorization: Splunk ${splunkHECToken}" \
+                --header "Content-Type: application/json" \
+                --data "@${payloadFile}" \
+                --output "${responseFile}" \
+                --write-out "%{http_code}" \
+                "${curlArgs[@]}" \
+                "${splunkHECURL}" 2>/dev/null
+        )"
+        curlExitCode=$?
+        reportTransmissionHttpCode="${httpCode}"
+
+        if (( curlExitCode == 0 )) && [[ "${httpCode}" == 2* ]]; then
+            reportTransmissionStatus="success"
+            notice "Splunk Reporting: payload delivered successfully (HTTP ${httpCode})"
+            rm -f "${payloadFile}" "${responseFile}"
+            return 0
+        fi
+
+        if [[ "${httpCode}" == 5* ]] || [[ "${httpCode:-000}" == "000" ]]; then
+            warning "Splunk Reporting: attempt ${attempt} failed (HTTP ${httpCode:-000}, curl ${curlExitCode}); retrying in ${retryDelay}s."
+            if (( attempt < 3 )); then
+                sleep "${retryDelay}"
+                retryDelay=$(( retryDelay * 2 ))
+                continue
+            fi
+        else
+            warning "Splunk Reporting: request failed without retry (HTTP ${httpCode:-000}, curl ${curlExitCode})."
+            break
+        fi
+    done
+
+    reportTransmissionStatus="failed"
+    addReportingError "Splunk HEC delivery failed after ${reportTransmissionAttemptCount} attempt(s) (HTTP ${reportTransmissionHttpCode:-000}, curl ${curlExitCode})"
+
+    rm -f "${payloadFile}" "${responseFile}"
+    return 1
+
+}
+
+function generateAndSendSplunkReport() {
+
+    local reportJSON=""
+
+    notice "Generating Splunk JSON report …"
+
+    rebuildOverallHealthFromRecordedResults
+    calculateOverallReportStatus
+    generateReportTimestamp
+
+    if [[ -n "${customReportFieldsJSON}" ]]; then
+        if validateJson "${customReportFieldsJSON}" && jsonIsObject "${customReportFieldsJSON}"; then
+            customFieldsJSON="$( compactJson "${customReportFieldsJSON}" )"
+        else
+            customFieldsJSON="{}"
+            warning "Splunk Reporting: customReportFieldsJSON is invalid or not a JSON object; ignoring Parameter 9."
+        fi
+    else
+        customFieldsJSON="{}"
+    fi
+
+    reportJSON="$( buildMacHealthReportJSON )"
+
+    if ! validateJson "${reportJSON}"; then
+        addReportingError "Generated report JSON failed validation; writing fallback error report."
+        reportOverallStatus="error"
+        reportJSON="$( buildFallbackReportJSON )"
+    fi
+
+    if [[ "${splunkPrettyPrintJSON}" == "true" ]]; then
+        reportFilePayload="$( prettyPrintJson "${reportJSON}" )"
+    else
+        reportFilePayload="$( compactJson "${reportJSON}" )"
+    fi
+
+    reportHECPayload="$( compactJson "$( buildSplunkHECPayload "$( compactJson "${reportJSON}" )" )" )"
+
+    writeSecureJSONFile "${splunkJSONReportPath}" "${reportFilePayload}"
+    if [[ -f "${splunkJSONReportPath}" ]]; then
+        reportGenerated="true"
+        notice "Splunk Reporting: local report written to ${splunkJSONReportPath}"
+    else
+        addReportingError "Failed to write local JSON report to ${splunkJSONReportPath}"
+    fi
+
+    if [[ "${splunkOperationMode}" == "off" ]]; then
+        reportTransmissionStatus="disabled"
+        info "Splunk Reporting: splunkOperationMode is off; local report only."
+        return 0
+    fi
+
+    if [[ "${splunkOperationMode}" == "test" ]]; then
+        reportTransmissionStatus="skipped_test_mode"
+        notice "Splunk Reporting: test mode enabled; skipping Splunk HEC transmission."
+        return 0
+    fi
+
+    if [[ -z "${splunkHECURL}" || -z "${splunkHECToken}" ]]; then
+        reportTransmissionStatus="not_configured"
+        info "Splunk Reporting: HEC URL or token not configured; local report only."
+        return 0
+    fi
+
+    sendSplunkHECPayload "${reportHECPayload}"
+
 }
 
 
@@ -1769,6 +2603,12 @@ function displayFailureNotification() {
 
 function quitScript() {
 
+    local problemCheckCount=0
+
+    rebuildOverallHealthFromRecordedResults
+    calculateOverallReportStatus
+    problemCheckCount=$(( ${#reportWarningChecks[@]} + ${#reportFailChecks[@]} + ${#reportErrorChecks[@]} ))
+
     quitOut "Exiting …"
 
     notice "${localAdminWarning}User: ${loggedInUserFullname} (${loggedInUser}) [${loggedInUserID}] ${loggedInUserGroupMembership}; Security Mode: ${bootPoliciesSecurityMode}; DEP-allowed MDM Control: ${bootPoliciesDepAllowedMdmControl}; Activation Lock: ${activationLockStatus}; ${bootstrapTokenStatus}; sudo Check: ${sudoStatus}; sudoers: ${sudoAllLines}; Kerberos SSOe: ${kerberosSSOeResult}; Platform SSOe: ${platformSSOeResult}; Location Services: ${locationServicesStatus}; SSH: ${sshStatus}; Microsoft OneDrive Sync Date: ${oneDriveSyncDate}; Time Machine Backup Date: ${tmStatus} ${tmLastBackup}; Battery Cycle Count: ${batteryCycleCount}; Rosetta-required apps: ${rosettaRequiredApps}; Wi-Fi: ${ssid}; ${activeIPAddress//\*\*/}; VPN IP: ${vpnStatus} ${vpnExtendedStatus}; ${networkTimeServer}"
@@ -1789,7 +2629,7 @@ function quitScript() {
         fi
         if [[ -n "${webhookURL}" ]]; then
             info "Sending webhook message"
-            webhookStatus="Failures Detected (${#errorMessages[@]} errors)"
+            webhookStatus="Failures Detected (${problemCheckCount} issues)"
             webHookMessage
         fi
         errorOut "${overallHealth%%; }"
@@ -1800,6 +2640,8 @@ function quitScript() {
             dialogUpdate "title: Computer Healthy <br>as of $( date '+%d-%b-%Y %H:%M:%S' )"
         fi
     fi
+
+    generateAndSendSplunkReport
 
     if [[ "${operationMode}" != "Silent" ]]; then
         dialogUpdate "progress: 100"
@@ -1925,11 +2767,14 @@ fi
 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-# Pre-flight Check: Confirm jq is installed
+# Pre-flight Check: Confirm JSON tooling availability
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-if ! command -v jq &> /dev/null; then
-    fatal "jq is not installed; exiting."
+if command -v jq &> /dev/null; then
+    preFlight "jq found; using jq for JSON validation and formatting where available."
+    reportJSONTool="jq"
+else
+    preFlight "jq not found; falling back to JXA / pure-Zsh JSON helpers."
 fi
 
 
@@ -4494,12 +5339,12 @@ if [[ "${operationMode}" == "Development" ]]; then
     ]
     '
     # Validate developmentListitemJSON is valid JSON
-    if ! echo "$developmentListitemJSON" | jq . >/dev/null 2>&1; then
+    if ! validateJson "${developmentListitemJSON}"; then
         echo "Error: developmentListitemJSON is invalid JSON"
         echo "$developmentListitemJSON"
         exit 1
     else
-        combinedJSON=$( jq -n --argjson dialog "$mainDialogJSON" --argjson listitems "$developmentListitemJSON" '$dialog + { "listitem": $listitems }' )
+        combinedJSON=$( mergeDialogAndListItems "${mainDialogJSON}" "${developmentListitemJSON}" )
     fi
 
 else
@@ -4508,18 +5353,22 @@ else
 
     case ${mdmVendor} in
 
-        "Addigy"            ) combinedJSON=$( jq -n --argjson dialog "$mainDialogJSON" --argjson listitems "$addigyMdmListitemJSON" '$dialog + { "listitem": $listitems }' ) ;;
-        "Filewave"          ) combinedJSON=$( jq -n --argjson dialog "$mainDialogJSON" --argjson listitems "$filewaveMdmListitemJSON" '$dialog + { "listitem": $listitems }' ) ;;
-        "Fleet"             ) combinedJSON=$( jq -n --argjson dialog "$mainDialogJSON" --argjson listitems "$fleetMdmListitemJSON" '$dialog + { "listitem": $listitems }' ) ;;
-        "Jamf Pro"          ) combinedJSON=$( jq -n --argjson dialog "$mainDialogJSON" --argjson listitems "$jamfProListitemJSON" '$dialog + { "listitem": $listitems }' ) ;;
-        "JumpCloud"         ) combinedJSON=$( jq -n --argjson dialog "$mainDialogJSON" --argjson listitems "$jumpcloudMdmListitemJSON" '$dialog + { "listitem": $listitems }' ) ;;
-        "Kandji"            ) combinedJSON=$( jq -n --argjson dialog "$mainDialogJSON" --argjson listitems "$kandjiMdmListitemJSON" '$dialog + { "listitem": $listitems }' ) ;;
-        "Microsoft Intune"  ) combinedJSON=$( jq -n --argjson dialog "$mainDialogJSON" --argjson listitems "$microsoftMdmListitemJSON" '$dialog + { "listitem": $listitems }' ) ;;
-        "Mosyle"            ) combinedJSON=$( jq -n --argjson dialog "$mainDialogJSON" --argjson listitems "$mosyleListitemJSON" '$dialog + { "listitem": $listitems }' ) ;;
-        *                   ) warning "Unknown MDM vendor: ${mdmVendor}" ; combinedJSON=$( jq -n --argjson dialog "$mainDialogJSON" --argjson listitems "$genericMdmListitemJSON" '$dialog + { "listitem": $listitems }' ) ;;
+        "Addigy"            ) combinedJSON=$( mergeDialogAndListItems "${mainDialogJSON}" "${addigyMdmListitemJSON}" ) ;;
+        "Filewave"          ) combinedJSON=$( mergeDialogAndListItems "${mainDialogJSON}" "${filewaveMdmListitemJSON}" ) ;;
+        "Fleet"             ) combinedJSON=$( mergeDialogAndListItems "${mainDialogJSON}" "${fleetMdmListitemJSON}" ) ;;
+        "Jamf Pro"          ) combinedJSON=$( mergeDialogAndListItems "${mainDialogJSON}" "${jamfProListitemJSON}" ) ;;
+        "JumpCloud"         ) combinedJSON=$( mergeDialogAndListItems "${mainDialogJSON}" "${jumpcloudMdmListitemJSON}" ) ;;
+        "Kandji"            ) combinedJSON=$( mergeDialogAndListItems "${mainDialogJSON}" "${kandjiMdmListitemJSON}" ) ;;
+        "Microsoft Intune"  ) combinedJSON=$( mergeDialogAndListItems "${mainDialogJSON}" "${microsoftMdmListitemJSON}" ) ;;
+        "Mosyle"            ) combinedJSON=$( mergeDialogAndListItems "${mainDialogJSON}" "${mosyleListitemJSON}" ) ;;
+        *                   ) warning "Unknown MDM vendor: ${mdmVendor}" ; combinedJSON=$( mergeDialogAndListItems "${mainDialogJSON}" "${genericMdmListitemJSON}" ) ;;
 
     esac
 
+fi
+
+if ! validateJson "${combinedJSON}"; then
+    fatal "combinedJSON is invalid; exiting."
 fi
 
 # Runtime check counters for dock badge updates
@@ -4529,6 +5378,7 @@ if [[ "${listitemLength}" != <-> ]]; then
 fi
 remainingChecks="${listitemLength}"
 completedCheckIndicesCsv=","
+initializeCheckMetadataFromCombinedJSON
 
 echo "$combinedJSON" > "$dialogJSONFile"
 

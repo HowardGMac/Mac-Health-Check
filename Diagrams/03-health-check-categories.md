@@ -1,6 +1,6 @@
 # Mac Health Check: Health Check Categories
 
-This diagram shows the `3.2.0` Mac Health Check runtime inventory organized by category. Each item is listed with its function name and a representative human-readable label shown in the swiftDialog interface.
+This diagram shows the `4.0.0b1` Mac Health Check runtime inventory organized by category. Each item is listed with its function name and a representative human-readable label shown in the swiftDialog interface.
 
 ```mermaid
 graph LR

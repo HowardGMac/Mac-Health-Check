@@ -1,12 +1,12 @@
 # Mac Health Check: Health Check Reference
 
-This text-only reference documents the key configurable defaults and runtime inventory for Mac Health Check `3.2.0`. No diagram is included; use [03-health-check-categories.md](03-health-check-categories.md) for a visual overview.
+This text-only reference documents the key configurable defaults and runtime inventory for Mac Health Check `4.0.0b1`. No diagram is included; use [03-health-check-categories.md](03-health-check-categories.md) for a visual overview.
 
 ---
 
-## 3.2.0 Runtime Notes
+## 4.0.0b1 Runtime Notes
 
-- `operationMode` is documented for the `3.2.0` release as `Self Service` by default, with `Silent`, `Debug`, `Development`, and `Test` also supported.
+- `operationMode` is documented for the `4.0.0b1` release as `Self Service` by default, with `Silent`, `Debug`, `Development`, and `Test` also supported.
 - Non-`Silent` runs with failures trigger `displayFailureNotification()`, which presents a persistent swiftDialog pseudo-alert summary of failed health checks.
 - Pre-flight requires swiftDialog `3.0.1.4955` or newer.
 - When `enableDockIntegration` is `true`, non-`Silent` runs show a Dock icon with a decreasing `dockiconbadge` count.
@@ -62,7 +62,7 @@ The support/help experience uses both legacy support fields and dynamic `support
 | `supportLabel1`–`supportLabel6` | Mixed defaults / blanks | Dynamic support labels shown in the help message |
 | `supportValue1`–`supportValue6` | Mixed defaults / blanks | Matching dynamic support values; empty pairs are skipped |
 
-**3.2.0 behavior notes**
+**4.0.0b1 behavior notes**
 
 - If all `supportLabelN` / `supportValueN` pairs are blank, the script falls back to the legacy `supportTeam*` and KB values.
 - The first URL-like `supportValueN` becomes the Info button action in the dialog.
@@ -162,3 +162,8 @@ Each external check policy writes results to `organizationDefaultsDomain` using 
 |---|---|---|---|
 | 4 | `operationMode` | `Self Service` | Operation mode: `Self Service`, `Silent`, `Debug`, `Development`, `Test` |
 | 5 | `webhookURL` | (blank) | Microsoft Teams or Slack webhook URL for failure notifications; leave blank to disable |
+| 6 | `splunkOperationMode` | `off` | Reporting mode: `off` disables HEC delivery, `production` posts to Splunk when configured, and `test` skips transmission while still generating the JSON report |
+| 7 | `splunkHECURL` | (blank) | Splunk HTTP Event Collector URL; leave blank to disable transmission |
+| 8 | `splunkHECToken` | (blank) | Splunk HEC token; never logged by the script |
+| 9 | `customReportFieldsJSON` | (blank) | Optional JSON object merged into the report under `customFields` |
+| 10 | `reportDebug` | `false` | Enables pretty-printed local JSON and verbose sanitized reporting output |
