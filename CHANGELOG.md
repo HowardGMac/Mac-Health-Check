@@ -2,15 +2,10 @@
 
 ## CHANGELOG
 
-### 4.0.0b1 (15-Apr-2026)
-- Added structured JSON health reporting with local report persistence at `/var/tmp/MacHealthCheck-Report.json` by default, written with root-only permissions
-- Added optional Splunk HTTP Event Collector delivery via new Parameters 6-10: `splunkOperationMode`, `splunkHECURL`, `splunkHECToken`, `customReportFieldsJSON`, and `reportDebug`
-- Added centralized per-check result collection so every executed health check is represented in the final JSON report with normalized status, message, and raw value
-- Added retry-aware Splunk delivery with timeout, TLS verification by default, sanitized logging, and graceful degradation when transmission fails
-- Added JSON validation, pretty-print debug output, and jq-optional fallbacks using JXA / pure-Zsh helpers so reporting no longer requires jq
-- Forward-ported `checkHomebrewStatus()` from `feature/87-homebrew-status`, adding Homebrew version / outdated-package reporting across the standard vendor check sets without reintroducing a jq dependency
-- Preserved existing swiftDialog behavior, Teams/Slack webhook support, MDM detection, and vendor-specific health-check flows
-- Aligned the 4.0.0b1 release documentation, parameter references, and version markers with the new reporting pipeline
+### 4.0.0b2 (15-Apr-2026)
+- Added secure JSON health reporting with optional Splunk HTTP Event Collector (HEC) delivery
+- Added per-check structured result collection, centralized final health-status calculation and local JSON report persistence with validation, pretty-print debug mode, and root-only permissions
+- Added jq-optional JSON helper fallbacks plus `splunkOperationMode`, `splunkHECURL`, `splunkHECToken`, `customReportFieldsJSON`, and `reportDebug` for enterprise reporting workflows
 
 ### 3.2.0 (02-Apr-2026)
 - Preserved user-provided local `organizationOverlayiconURL` files by downloading remote overlay icons to a per-run temporary file and only cleaning up that script-managed asset at exit (Thanks for the heads-up, @brian_b!)

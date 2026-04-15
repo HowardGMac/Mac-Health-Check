@@ -1,6 +1,6 @@
 ![GitHub release (latest by date)](https://img.shields.io/github/v/release/dan-snelson/Mac-Health-Check?display_name=tag) ![GitHub pre-release (latest by date)](https://img.shields.io/github/v/release/dan-snelson/Mac-Health-Check?display_name=tag&include_prereleases) ![GitHub issues](https://img.shields.io/github/issues-raw/dan-snelson/Mac-Health-Check) ![GitHub closed issues](https://img.shields.io/github/issues-closed-raw/dan-snelson/Mac-Health-Check) ![GitHub pull requests](https://img.shields.io/github/issues-pr-raw/dan-snelson/Mac-Health-Check) ![GitHub closed pull requests](https://img.shields.io/github/issues-pr-closed-raw/dan-snelson/Mac-Health-Check)
 
-# Mac Health Check (4.0.0b1)
+# Mac Health Check (4.0.0b2)
 
 > Another pleasant update to the practical, MDM-agnostic, user-friendly approach to surfacing Mac compliance information directly to end-users via your MDM's self-service app
 
@@ -53,9 +53,9 @@ Mac Health Check is particularly valuable in IT support workflows, serving as an
 - If dock icon setup fails, Mac Health Check logs a warning and falls back to the default `/usr/local/bin/dialog` launch path
 
 ## Features
-The following health checks and information reporting are included in version `4.0.0b1`, which operates in `Self Service` mode by default. (Change `operationMode` to `Debug`, `Development` or `Test` when getting ready to deploy in production.)
+The following health checks and information reporting are included in version `4.0.0b2`, which operates in `Self Service` mode by default. (Change `operationMode` to `Debug`, `Development` or `Test` when getting ready to deploy in production.)
 
-> :new: Mac Health Check version `4.0.0b1` adds secure JSON report generation plus optional Splunk HEC delivery, while retaining the `3.2.0` persistent failed-health notification behavior.
+> :new: Mac Health Check version `4.0.0b2` adds secure JSON report generation plus optional Splunk HEC delivery, while retaining the `3.2.0` persistent failed-health notification behavior.
  
 <img src="images/MHC_3.2.0_failure_notification.png" alt="Health Checks" width="400"/>
 
@@ -162,7 +162,7 @@ The following health checks and information reporting are included in version `4
 ### Policy Log Reporting
 
 ```
-MHC (4.0.0b1): 2026-03-28 03:43:13 - [NOTICE] WARNING: 'localadmin' IS A MEMBER OF 'admin';
+MHC (4.0.0b2): 2026-03-28 03:43:13 - [NOTICE] WARNING: 'localadmin' IS A MEMBER OF 'admin';
 User: macOS Server Administrator (localadmin) [503] staff everyone localaccounts _appserverusr 
 admin _appserveradm com.apple.sharepoint.group.4 com.apple.sharepoint.group.3
 com.apple.sharepoint.group.1 _appstore _lpadmin _lpoperator _developer _analyticsusers
@@ -210,7 +210,7 @@ Deployment of Mac Health Check involves configuring organizational defaults, upl
 
 A new "Development" Operation Mode has been added to aid in developing Health Checks, allowing the easy execution of a _single_ Health Check.
 
-When `operationMode` is set to `Development`, the current `4.0.0b1` implementation uses a dedicated `developmentListitemJSON` for a single `Microsoft Teams` check instead of running the entire suite.
+When `operationMode` is set to `Development`, the current `4.0.0b2` implementation uses a dedicated `developmentListitemJSON` for a single `Microsoft Teams` check instead of running the entire suite.
 
 ```zsh
 ####################################################################################################

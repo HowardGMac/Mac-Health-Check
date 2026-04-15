@@ -17,17 +17,12 @@
 #
 # HISTORY
 #
-# Version 4.0.0b1, 15-Apr-2026, Dan K. Snelson (@dan-snelson)
+# Version 4.0.0b2, 15-Apr-2026, Dan K. Snelson (@dan-snelson)
 #   - Added secure JSON health reporting with optional Splunk HTTP Event Collector (HEC) delivery
-#   - Added per-check structured result collection and centralized final health-status calculation
-#   - Added local JSON report persistence with validation, pretty-print debug mode, and root-only permissions
-#   - Added jq-optional JSON helper fallbacks for validation, formatting, and dialog/listitem merging
-#   - Forward-ported `checkHomebrewStatus()` from `feature/87-homebrew-status` to add
-#     Homebrew version / outdated-package reporting without reintroducing a jq requirement
-#   - Added `splunkOperationMode`, `splunkHECURL`, `splunkHECToken`, `customReportFieldsJSON`
-#     and `reportDebug` parameters for enterprise reporting workflows
-#   - Preserved existing swiftDialog, webhook, health-check, and MDM-specific behavior while
-#     allowing Splunk/reporting failures to degrade gracefully
+#   - Added per-check structured result collection, centralized final health-status calculation,
+#     and local JSON report persistence with validation, pretty-print debug mode, and root-only permissions
+#   - Added jq-optional JSON helper fallbacks plus `splunkOperationMode`, `splunkHECURL`,
+#     `splunkHECToken`, `customReportFieldsJSON`, and `reportDebug` for enterprise reporting workflows
 #
 ####################################################################################################
 
@@ -42,7 +37,7 @@
 export PATH=/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin/
 
 # Script Version
-scriptVersion="4.0.0b1"
+scriptVersion="4.0.0b2"
 
 # Client-side Log
 scriptLog="/var/log/org.churchofjesuschrist.log"
@@ -66,7 +61,7 @@ SECONDS="0"
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 # Parameter 4: Operation Mode [ Debug | Development | Self Service | Silent | Test ]
-operationMode="${4:-"Development"}"
+operationMode="${4:-"Self Service"}"
 
     # Enable `set -x` if operation mode is "Debug" to help identify issues
     [[ "${operationMode}" == "Debug" ]] && set -x
@@ -74,7 +69,7 @@ operationMode="${4:-"Development"}"
 # Parameter 5: Microsoft Teams or Slack Webhook URL [ Leave blank to disable (default) | https://microsoftTeams.webhook.com/URL | https://hooks.slack.com/services/URL ]
 webhookURL="${5:-""}"
 
-# === NEW IN 4.0.0b1 ===
+# === NEW IN 4.0.0b2 ===
 # Parameter 6: Splunk reporting mode [ off | test | production ]
 splunkOperationMode="${6:-"test"}"
 
@@ -181,7 +176,7 @@ excessiveUptimeAlertStyle="warning"
 # Completion Timer (in seconds)
 completionTimer="60"
 
-# === NEW IN 4.0.0b1 ===
+# === NEW IN 4.0.0b2 ===
 # Splunk and JSON reporting defaults
 splunkJSONReportPath="/var/tmp/MacHealthCheck-Report.json"
 splunkPrettyPrintJSON="false"
@@ -1703,7 +1698,7 @@ function dialogUpdate(){
 
 function runAsUser() {
 
-    info "Run \"$@\" as \"$loggedInUserID\" … "
+    info "Run \"$@\" as \"$loggedInUserID\" … " 1>&2
     launchctl asuser "$loggedInUserID" sudo -u "$loggedInUser" "$@"
 
 }
@@ -1723,7 +1718,7 @@ function get_json_value() {
 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-# === NEW IN 4.0.0b1 ===
+# === NEW IN 4.0.0b2 ===
 # Result-collection Helpers
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
@@ -1978,7 +1973,7 @@ function getCheckStatusByTitle() {
 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-# === NEW IN 4.0.0b1 ===
+# === NEW IN 4.0.0b2 ===
 # Splunk Reporting Helpers
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 

@@ -1,6 +1,6 @@
 # Mac Health Check: Script Execution Flow
 
-This flowchart documents the `4.0.0b1` decision logic executed each time Mac Health Check runs, from the initial invocation through pre-flight validation, health check execution, and final output.
+This flowchart documents the `4.0.0b2` decision logic executed each time Mac Health Check runs, from the initial invocation through pre-flight validation, health check execution, and final output.
 
 ```mermaid
 graph TB
@@ -186,7 +186,7 @@ Set via MDM policy parameter. Determines UI behavior and which checks execute. T
 The script must run as root. If not, it calls `fatal()` and exits immediately with a log entry.
 
 ### 3. jq Availability
-The script prefers `jq` for JSON validation and formatting, but `4.0.0b1` falls back to JXA / pure-Zsh helpers when `jq` is unavailable.
+The script prefers `jq` for JSON validation and formatting, but `4.0.0b2` falls back to JXA / pure-Zsh helpers when `jq` is unavailable.
 
 ### 4. swiftDialog Version
 The script requires swiftDialog ≥ 3.0.1.4955. If the installed version is older (or swiftDialog is absent), the script downloads and installs the latest release from GitHub before proceeding.

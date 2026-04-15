@@ -1,6 +1,6 @@
 # Mac Health Check: Deployment Workflow
 
-This diagram provides a step-by-step guide for deploying the `4.0.0b1` release of Mac Health Check through an MDM solution. Follow the phases in order for a successful deployment.
+This diagram provides a step-by-step guide for deploying the `4.0.0b2` release of Mac Health Check through an MDM solution. Follow the phases in order for a successful deployment.
 
 ```mermaid
 graph TB
