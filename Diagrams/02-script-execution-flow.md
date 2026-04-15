@@ -31,7 +31,7 @@ graph TB
     subgraph PreFlight["✈️ Pre-flight Checks"]
         PREFLIGHT_START["Initialize client log<br>/var/log/org.churchofjesuschrist.log"]
         ROOTCHECK{"Running as root?"}
-        JQCHECK{"jq installed?"}
+        JSONTOOLS["Select JSON helpers<br>Prefer jq when available;<br>otherwise use JXA / pure-Zsh"]
         SDCHECK{"swiftDialog<br>≥ 3.0.1.4955?"}
         SDINSTALL["Download & install<br>swiftDialog from GitHub"]
         KILLSD["Kill existing<br>Dialog instances"]
@@ -40,9 +40,8 @@ graph TB
         SETX --> PREFLIGHT_START
         PREFLIGHT_START --> ROOTCHECK
         ROOTCHECK -->|No| FATAL1(["💀 Fatal Error:<br>Not running as root"])
-        ROOTCHECK -->|Yes| JQCHECK
-        JQCHECK -->|No| FATAL2(["💀 Fatal Error:<br>jq not found"])
-        JQCHECK -->|Yes| SDCHECK
+        ROOTCHECK -->|Yes| JSONTOOLS
+        JSONTOOLS --> SDCHECK
         SDCHECK -->|No| SDINSTALL
         SDINSTALL --> KILLSD
         SDCHECK -->|Yes| KILLSD
@@ -50,24 +49,23 @@ graph TB
 
         style PREFLIGHT_START fill:#b2dfdb
         style ROOTCHECK fill:#ffecb3
-        style JQCHECK fill:#ffecb3
+        style JSONTOOLS fill:#e1f5ff
         style SDCHECK fill:#ffecb3
         style SDINSTALL fill:#fff4e6
         style KILLSD fill:#fff4e6
         style DOCKBADGE fill:#e1f5ff
         style FATAL1 fill:#ffcdd2
-        style FATAL2 fill:#ffcdd2
     end
 
     subgraph MDMDetect["🔍 MDM Vendor Detection"]
         DETECTMDM["Inspect installed profiles<br>Match against known MDM vendors"]
         MDMVENDOR{"MDM Vendor<br>Identified?"}
-        JAMF["Jamf Pro<br>37 checks"]
-        KANDJI["Kandji<br>30 checks"]
-        INTUNE["Microsoft Intune<br>30 checks"]
-        MOSYLE["Mosyle<br>31 checks"]
-        JUMPCLOUD["JumpCloud<br>30 checks"]
-        OTHERS["Addigy / Filewave<br>Fleet / Generic<br>28–30 checks"]
+        JAMF["Jamf Pro<br>38 checks"]
+        KANDJI["Kandji<br>31 checks"]
+        INTUNE["Microsoft Intune<br>31 checks"]
+        MOSYLE["Mosyle<br>32 checks"]
+        JUMPCLOUD["JumpCloud<br>31 checks"]
+        OTHERS["Addigy / Filewave<br>Fleet / Generic<br>27–31 checks"]
 
         DOCKBADGE --> DETECTMDM
         DETECTMDM --> MDMVENDOR
@@ -91,7 +89,7 @@ graph TB
     subgraph ModeCheck2["🎛️ Operation Mode Branch"]
         MODESWITCH{"operationMode?"}
         ISSILENT["Silent Mode<br>Skip main dialog — log only"]
-        ISDEV["Development Mode<br>Run curated dev subset<br>(Updates, AirDrop, Jamf Hosts,<br>Disk and user folders)"]
+        ISDEV["Development Mode<br>Run current single-check dev path<br>(Microsoft Teams)"]
         ISTEST["Test Mode<br>Simulate current vendor list items<br>without running real checks"]
         NORMAL["Self Service / Debug<br>Full interactive run"]
 
@@ -222,7 +220,6 @@ When non-`Silent` runs detect failures, `displayFailureNotification()` launches 
 | Path | Trigger | Logged? |
 |---|---|---|
 | Fatal: Not root | `EUID != 0` | Yes (`[FATAL ERROR]`) |
-| Fatal: jq missing | `jq` not found | Yes (`[FATAL ERROR]`) |
 | Normal: Silent | All checks complete, no UI | Yes |
 | Normal: Self Service | User dismisses or timer expires | Yes |
 | Normal: Test | Current vendor list items simulated as success | Yes |

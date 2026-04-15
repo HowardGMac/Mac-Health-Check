@@ -90,12 +90,14 @@ graph LR
 
     subgraph Apps["📦 Apps"]
         A1["checkAppAutoPatch()<br>App Auto-Patch"]
-        A2["checkElectronCornerMask()<br>Electron Corner Mask"]
-        A3["checkInternal()<br>Required App Presence<br>(MDM vendor–specific)"]
+        A2["checkHomebrewStatus()<br>Homebrew Status"]
+        A3["checkElectronCornerMask()<br>Electron Corner Mask"]
+        A4["checkInternal()<br>Required App Presence<br>(MDM vendor–specific)"]
 
         style A1 fill:#ffecb3
         style A2 fill:#ffecb3
         style A3 fill:#ffecb3
+        style A4 fill:#ffecb3
     end
 
     subgraph External["🔌 External"]
@@ -184,7 +186,7 @@ MDM connectivity and certificate health checks. Vendor-specific checks (Jamf Pro
 Validates reachability to Apple infrastructure and (for Jamf Pro) Jamf Cloud hosts. `checkNetworkQuality()` runs an `networkQuality` speed test, caching results for up to `networkQualityTestMaximumAge` (default: 1 hour) to avoid repeated tests.
 
 ### Apps
-Application-specific checks. `checkInternal()` validates the presence of an MDM vendor–specific companion app (e.g., Company Portal for Intune, Self-Service.app for Mosyle). `checkAppAutoPatch()` validates the App Auto-Patch patching agent.
+Application-specific checks. `checkAppAutoPatch()` validates the App Auto-Patch patching agent. `checkHomebrewStatus()` compares the installed Homebrew release and outdated package counts without auto-updating Homebrew metadata. `checkInternal()` validates the presence of an MDM vendor–specific companion app (e.g., Company Portal for Intune, Self-Service.app for Mosyle).
 
 ### External
 Optional plugin checks for third-party security tools. These require separate MDM policies from the `external-checks/` directory and use a shared defaults domain (`organizationDefaultsDomain`) to pass results to the main script. Available only in Jamf Pro deployments.
@@ -197,4 +199,4 @@ Optional plugin checks for third-party security tools. These require separate MD
 | `symvGlobalProtect` | Palo Alto GlobalProtect | `GlobalProtect.app` |
 
 ### Inventory
-`updateComputerInventory()` is a Jamf Pro-only follow-up action that submits the Mac's latest inventory after the rest of the Jamf-specific check set completes. It is represented as a list item in the UI and appears as the final Jamf Pro step in `3.2.0`.
+`updateComputerInventory()` is a Jamf Pro-only follow-up action that submits the Mac's latest inventory after the rest of the Jamf-specific check set completes. It is represented as a list item in the UI and appears as the final Jamf Pro step in `4.0.0b1`.

@@ -8,6 +8,7 @@
 - Added centralized per-check result collection so every executed health check is represented in the final JSON report with normalized status, message, and raw value
 - Added retry-aware Splunk delivery with timeout, TLS verification by default, sanitized logging, and graceful degradation when transmission fails
 - Added JSON validation, pretty-print debug output, and jq-optional fallbacks using JXA / pure-Zsh helpers so reporting no longer requires jq
+- Forward-ported `checkHomebrewStatus()` from `feature/87-homebrew-status`, adding Homebrew version / outdated-package reporting across the standard vendor check sets without reintroducing a jq dependency
 - Preserved existing swiftDialog behavior, Teams/Slack webhook support, MDM detection, and vendor-specific health-check flows
 - Aligned the 4.0.0b1 release documentation, parameter references, and version markers with the new reporting pipeline
 

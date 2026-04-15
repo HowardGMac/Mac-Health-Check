@@ -42,9 +42,9 @@ graph TB
 
     subgraph Client["💻 Client Mac"]
         TRIGGER["Policy Trigger<br>User via Self Service<br>or scheduled run"]
-        PREFLIGHT["Pre-flight Checks<br>• Running as root?<br>• swiftDialog ≥ 3.0.1.4955 installed?<br>• jq installed?<br>• Kill existing Dialog instances"]
+        PREFLIGHT["Pre-flight Checks<br>• Running as root?<br>• swiftDialog ≥ 3.0.1.4955 installed?<br>• JSON helpers selected<br>• Kill existing Dialog instances"]
         MDMDETECT["MDM Vendor Detection<br>Auto-detect from installed profiles:<br>Jamf Pro / Kandji / Intune / Mosyle<br>JumpCloud / Addigy / Filewave / Fleet"]
-        CHECKLIST["Check Set Selection<br>Vendor-specific list<br>(26–37 checks)"]
+        CHECKLIST["Check Set Selection<br>Vendor-specific list<br>(27–38 checks)"]
 
         POLICY -->|Executes script| TRIGGER
         SILENT -.->|Executes script| TRIGGER
@@ -140,7 +140,7 @@ The script validates its environment before running any health checks:
 4. Kills any existing swiftDialog instances
 
 **MDM Vendor Detection**
-The script inspects installed configuration profiles to identify the MDM vendor, then selects the appropriate health check set (26–37 checks depending on vendor capabilities).
+The script inspects installed configuration profiles to identify the MDM vendor, then selects the appropriate health check set (27–38 checks depending on vendor capabilities).
 
 ---
 

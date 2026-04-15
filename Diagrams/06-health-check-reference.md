@@ -12,6 +12,7 @@ This text-only reference documents the key configurable defaults and runtime inv
 - When `enableDockIntegration` is `true`, non-`Silent` runs show a Dock icon with a decreasing `dockiconbadge` count.
 - `checkAvailableSoftwareUpdates()` includes deferred and DDM-enforced OS update handling.
 - `checkFreeDiskSpace()` prefers Finder-aligned available capacity and falls back to `diskutil info /` when needed.
+- `checkHomebrewStatus()` compares the installed Homebrew release and local outdated package counts without auto-updating Homebrew metadata.
 - Help and support content is built dynamically from `supportLabelN` / `supportValueN` pairs, with legacy support fields used as a fallback.
 - `updateComputerInventory()` is the final Jamf Pro-specific check in the Jamf Pro check set.
 
@@ -110,6 +111,7 @@ The table below lists every health check function, its human-readable name, and 
 | Network | `checkNetworkHosts()` | Jamf Hosts | — | — | — | ✅ | — | — | — | — | — |
 | Network | `checkNetworkQuality()` | Network Quality Test | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Apps | `checkAppAutoPatch()` | App Auto-Patch | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| Apps | `checkHomebrewStatus()` | Homebrew Status | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Apps | `checkElectronCornerMask()` | Electron Corner Mask | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Apps | `checkInternal()` | Microsoft Teams | ✅ | — | ✅ | ✅ | ✅ | ✅ | — | — | — |
 | Apps | `checkInternal()` | Microsoft Company Portal | — | — | — | — | — | — | ✅ | — | — |
@@ -127,15 +129,15 @@ The table below lists every health check function, its human-readable name, and 
 
 | MDM Vendor | Total Checks |
 |---|---|
-| Jamf Pro | 37 |
-| Mosyle | 31 |
-| Addigy | 30 |
-| Filewave | 29 |
-| Fleet | 30 |
-| JumpCloud | 30 |
-| Kandji | 30 |
-| Microsoft Intune | 30 |
-| Generic / None | 26 |
+| Jamf Pro | 38 |
+| Mosyle | 32 |
+| Addigy | 31 |
+| Filewave | 30 |
+| Fleet | 31 |
+| JumpCloud | 31 |
+| Kandji | 31 |
+| Microsoft Intune | 31 |
+| Generic / None | 27 |
 
 > **Note:** `checkNetworkHosts()` is called once per host group; the five Apple host groups plus the Jamf-specific host group each count as one check. `checkUserDirectorySizeItems()` is called three times (Desktop, Downloads, Trash) and each counts as one check.
 
