@@ -6,9 +6,6 @@ Guidance for coding agents working in this repository.
 
 - Project: Mac Health Check
 - Primary artifact: `Mac-Health-Check.zsh`
-- Current repository version markers: `3.2.0` in `VERSION.txt` and `scriptVersion`
-- Current objective: maintain and improve the production `3.2.x` release line while keeping behavior, docs, diagrams, and packaging resources aligned
-- Historical reference plan: `Resources/projectPlan.md` documents the 3.0.0 rollout and architecture intent, but it lags the current implementation in places
 
 ## Source of Truth
 
@@ -60,6 +57,9 @@ Mac Health Check should provide clear, actionable device health and compliance i
 
 ## Repository Notes
 
+- Current repository version markers: `3.2.0` in `VERSION.txt` and `scriptVersion`
+- Current objective: maintain and improve the production `3.2.x` release line while keeping behavior, docs, diagrams, and packaging resources aligned
+- Historical reference plan: `Resources/projectPlan.md` documents the 3.0.0 rollout and architecture intent, but it lags the current implementation in places
 - Some supporting docs still carry `3.0.0` headings or metadata. Treat those as documentation debt unless the task is explicitly historical.
 - Tracked release artifacts exist under `Resources/`; do not rebuild or replace them unless the task specifically calls for a release/package refresh.
 - Check `git status` before editing shared docs or assets so you do not overwrite unrelated local work.
@@ -117,6 +117,9 @@ Maintain the established style of `Mac-Health-Check.zsh` unless the user explici
 
 ## Change Discipline
 
+- Keep durable repository rules and workflow guidance near the top of this file so recurring Codex sessions start from a stable instruction prefix.
+- Put fast-changing release markers, temporary rollout notes, and dated status items lower in the file or in adjacent docs unless they must affect every task.
+- Avoid adding timestamps, counters, or ephemeral task checklists here when `VERSION.txt`, `CHANGELOG.md`, or project-plan docs are a better fit.
 - Prefer minimal, targeted edits over broad rewrites.
 - Keep naming and style consistent with existing script conventions.
 - Avoid introducing hidden behavior changes when refactoring.
