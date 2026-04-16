@@ -17,9 +17,9 @@
 #
 # HISTORY
 #
-# Version 4.0.0b6, 16-Apr-2026, Dan K. Snelson (@dan-snelson)
+# Version 4.0.0b6.2, 16-Apr-2026, Dan K. Snelson (@dan-snelson)
 # - Added JSON health reporting (with optional Splunk HTTP Event Collector (HEC) delivery)
-# - Added a detached swiftDialog Inspect Mode (i.e., `inspectSummaryPreset`) summary plus cached replay (i.e., `inspectReplayMaximumAgeSeconds`) for `Self Service` runs
+# - Added a detached swiftDialog Inspect Mode (i.e., `inspectSummaryPreset="on"`) summary plus cached replay (i.e., `inspectReplayMaximumAgeSeconds`) for `Self Service` runs
 # - Refactored `checkElectronCornerMask` to reduce execution time
 # - Raised the minimum required swiftDialog version to `3.1.0.4976`
 #
@@ -36,7 +36,7 @@
 export PATH=/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin/
 
 # Script Version
-scriptVersion="4.0.0b6"
+scriptVersion="4.0.0b6.2"
 
 # Client-side Log
 scriptLog="/var/log/org.churchofjesuschrist.log"
@@ -176,12 +176,15 @@ excessiveUptimeAlertStyle="warning"
 completionTimer="60"
 
 # --- New in `4.0.0` ------------------------------------------------------------------------------
-# Splunk and JSON reporting defaults
-splunkJSONReportPath="/var/tmp/MacHealthCheck-Report.json"
+# Inspect Mode Defaults
+# Toggle detached inspect summary generation and cached replay [ on | off ]
+inspectSummaryPreset="on"
 inspectConfigPath="/var/tmp/MacHealthCheck-Inspect-Config.json"
 inspectLaunchLogPath="/var/tmp/MacHealthCheck-Inspect-Summary.log"
-inspectSummaryPreset="6"
 inspectReplayMaximumAgeSeconds="900"
+
+# Splunk and JSON reporting defaults
+splunkJSONReportPath="/var/tmp/MacHealthCheck-Report.json"
 splunkPrettyPrintJSON="false"
 splunkReportDebug="false"
 splunkAllowInsecureTLS="false"
@@ -247,6 +250,15 @@ if [[ "${operationMode}" == "Debug" ]]; then
     splunkReportDebug="true"
     splunkPrettyPrintJSON="true"
 fi
+
+case "${inspectSummaryPreset:l}" in
+    "off" )
+        inspectSummaryPreset="off"
+        ;;
+    * )
+        inspectSummaryPreset="on"
+        ;;
+esac
 
 
 
@@ -2584,6 +2596,12 @@ function buildInspectIntroductionGuidanceContentJSON() {
 
 }
 
+function inspectSummaryIsEnabled() {
+
+    [[ "${inspectSummaryPreset}" == "on" ]]
+
+}
+
 function buildInspectResultsGuidanceContentJSON() {
 
     local inspectResultItems=()
@@ -2672,7 +2690,7 @@ function buildInspectConfigJSON() {
     local inspectHighlightColor="#007AFF"
 
     printf '%s' "{"
-    printf '%s' "\"preset\":$( jsonString "${inspectSummaryPreset}" ),"
+    printf '%s' "\"preset\":\"6\","
     printf '%s' "\"title\":$( jsonString "$( getInspectWindowTitle )" ),"
     printf '%s' "\"highlightColor\":$( jsonString "${inspectHighlightColor}" ),"
     printf '%s' "\"items\":$( buildInspectItemsJSONArray )"
@@ -2685,8 +2703,7 @@ function validateInspectConfigFile() {
     local inspectConfigToValidate="${1:-${inspectConfigPath}}"
 
     jq -e \
-        --arg inspectSummaryPreset "${inspectSummaryPreset}" \
-        '.preset == $inspectSummaryPreset
+        '.preset == "6"
         and (.title | type == "string")
         and (.title | length > 0)
         and (.highlightColor | type == "string")
@@ -2770,6 +2787,10 @@ function generateInspectSummaryAssets() {
 
     local inspectConfigJSON=""
 
+    if ! inspectSummaryIsEnabled; then
+        return 1
+    fi
+
     inspectConfigJSON="$( buildInspectConfigJSON )"
 
     if ! validateJson "${inspectConfigJSON}"; then
@@ -2798,6 +2819,10 @@ function launchInspectSummary() {
     local inspectPID=""
     local launchCommand=""
 
+    if ! inspectSummaryIsEnabled; then
+        return 1
+    fi
+
     if [[ ! -r "${inspectConfigToLaunch}" ]]; then
         warning "Inspect Summary: config file is not readable at ${inspectConfigToLaunch}."
         return 1
@@ -2819,7 +2844,7 @@ function launchInspectSummary() {
         return 1
     fi
 
-    notice "Inspect Summary: launched detached ${inspectSummaryPreset} summary (PID ${inspectPID}; log ${inspectLaunchLogPath})."
+    notice "Inspect Summary: launched detached Preset 6 summary (PID ${inspectPID}; log ${inspectLaunchLogPath})."
     return 0
 
 }
@@ -2829,6 +2854,10 @@ function replayCachedInspectSummaryIfEligible() {
     local configJSON=""
     local configFileEpoch=""
     local configFileAgeSeconds="0"
+
+    if ! inspectSummaryIsEnabled; then
+        return 1
+    fi
 
     if [[ "${operationMode}" != "Self Service" ]]; then
         return 1
@@ -2852,21 +2881,21 @@ function replayCachedInspectSummaryIfEligible() {
 
     configJSON="$(<"${inspectConfigPath}")"
     if ! validateJson "${configJSON}"; then
-        warning "Inspect Summary Replay: cached config JSON is invalid for Preset ${inspectSummaryPreset}; running full health check."
+        warning "Inspect Summary Replay: cached config JSON is invalid for Preset 6; running full health check."
         return 1
     fi
 
     if ! validateInspectConfigFile "${inspectConfigPath}"; then
-        warning "Inspect Summary Replay: cached config structure is invalid for Preset ${inspectSummaryPreset}; running full health check."
+        warning "Inspect Summary Replay: cached config structure is invalid for Preset 6; running full health check."
         return 1
     fi
 
-    notice "Inspect Summary Replay: launching cached Preset ${inspectSummaryPreset} summary from the last ${inspectReplayMaximumAgeSeconds} seconds."
+    notice "Inspect Summary Replay: launching cached Preset 6 summary from the last ${inspectReplayMaximumAgeSeconds} seconds."
     if launchInspectSummary "${inspectConfigPath}"; then
         return 0
     fi
 
-    warning "Inspect Summary Replay: detached launch failed for Preset ${inspectSummaryPreset}; running full health check."
+    warning "Inspect Summary Replay: detached launch failed for Preset 6; running full health check."
     return 1
 
 }
@@ -3124,7 +3153,7 @@ function quitScript() {
 
     generateAndSendSplunkReport
 
-    if [[ "${operationMode}" == "Self Service" ]]; then
+    if [[ "${operationMode}" == "Self Service" ]] && inspectSummaryIsEnabled; then
         if generateInspectSummaryAssets && launchInspectSummary; then
             inspectSummaryLaunched="true"
         else
@@ -3139,7 +3168,7 @@ function quitScript() {
         dialogUpdate "button1: enable"
 
         if [[ "${inspectSummaryLaunched}" == "true" ]]; then
-            notice "Inspect Summary: detached ${inspectSummaryPreset} summary launched; retaining the existing completion countdown on the main dialog."
+            notice "Inspect Summary: detached Preset 6 summary launched; retaining the existing completion countdown on the main dialog."
         fi
         
         sleep "${anticipationDuration}"

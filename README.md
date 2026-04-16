@@ -18,6 +18,8 @@ Administrators can customize the user interface using swiftDialog’s visual cap
 
 The tool logs results for review, writes a structured JSON health report locally, can optionally forward that report to Splunk HEC, and continues to avoid altering device configuration. In `Self Service`, `4.0.0b6` now launches a detached swiftDialog Inspect Mode `preset6` guided summary built directly from finalized in-memory results while retaining the main dialog's 60-second completion countdown, and reruns within 15 minutes can replay that cached summary without re-running health checks. `Silent` remains well-suited for background IT visibility without end-user intrusion.
 
+`inspectSummaryPreset` is now an `on` / `off` toggle: `on` launches the fixed Preset 6 inspect summary and enables cached replay, while `off` disables both behaviors entirely.
+
 The current `4.0.0b6` beta expects swiftDialog `3.1.0.4976` or newer so `Self Service` can launch the detached inspect summary.
 
 <a href="https://www.youtube.com/watch?v=rDPoYlSSEtQ&t=36s" target="_blank"><img src="images/Mac_Health_Check Presentation.png" alt="Rocketman Tech December 2025 Meetup" width="600"/><br />Rocketman Tech December 2025 Meetup</a> (05-Dec-2025)
@@ -129,6 +131,7 @@ The following health checks and information reporting are included in version `4
 - `Self Service` runs now generate `/var/tmp/MacHealthCheck-Inspect-Config.json` directly from finalized in-memory results
 - Normal `Self Service` runs launch the detached swiftDialog Inspect Mode `preset6` guided summary after report generation while retaining the existing 60-second main-dialog countdown
 - Re-running `zsh Mac-Health-Check.zsh` within `inspectReplayMaximumAgeSeconds` (i.e., 15 minutes), replays the cached inspect summary immediately and skips the health checks plus the main dialog countdown
+- `inspectSummaryPreset="on"` enables the fixed Preset 6 summary; set it to `off` to completely disable inspect-summary generation plus cached replay
 - Unhealthy `Self Service` runs still show the existing persistent failure pseudo-alert before the inspect summary launches
 - If inspect-summary asset generation or launch fails, Mac Health Check falls back to the existing `completionTimer` countdown path
 - Requires swiftDialog `3.1.0.4976` or newer

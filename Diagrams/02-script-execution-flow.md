@@ -1,6 +1,6 @@
 # Mac Health Check: Script Execution Flow
 
-This flowchart documents the `4.0.0b6` decision logic executed each time Mac Health Check runs, from the initial invocation through pre-flight validation, health check execution, and final output.
+This flowchart documents the `4.0.0b6.1` decision logic executed each time Mac Health Check runs, from the initial invocation through pre-flight validation, health check execution, and final output.
 
 ```mermaid
 graph TB
@@ -35,8 +35,8 @@ graph TB
         SDCHECK{"swiftDialog<br>≥ 3.1.0.4976?"}
         SDINSTALL["Download & install<br>swiftDialog from GitHub"]
         KILLSD["Kill existing<br>Dialog instances"]
-        REPLAYCHECK{"Self Service cached inspect config<br>< 15 minutes old and valid?"}
-        REPLAYLAUNCH["Launch cached preset6 summary<br>skip checks and exit"]
+        REPLAYCHECK{"Self Service + inspectSummaryPreset=on<br>cached inspect config<br>< 15 minutes old and valid?"}
+        REPLAYLAUNCH["Launch cached Preset 6 summary<br>skip checks and exit"]
         DOCKBADGE["Prepare Dock launch state<br>and initial badge<br>(non-Silent when enabled)"]
 
         SETX --> PREFLIGHT_START
@@ -150,8 +150,8 @@ graph TB
         SENDWEBHOOK["Post failure summary<br>to Teams or Slack"]
         REPORT["Write canonical local JSON report<br>and optional Splunk HEC payload"]
         COMPLETIONUI{"Non-Silent mode?"}
-        INSPECTHANDOFF{"Self Service inspect handoff<br>succeeds?"}
-        INSPECT["Launch detached preset6 summary<br>retain main dialog countdown"]
+        INSPECTHANDOFF{"Self Service + inspectSummaryPreset=on<br>inspect handoff succeeds?"}
+        INSPECT["Launch detached Preset 6 summary<br>retain main dialog countdown"]
         COMPLETIONTIMER["Display completion timer<br>enable Close button"]
         CLEANUP["Remove temp files<br>clear Dock badge"]
         EXIT(["⏹ Script Exits"])
@@ -203,7 +203,7 @@ Set via MDM policy parameter. Determines UI behavior and which checks execute. T
 The script must run as root. If not, it calls `fatal()` and exits immediately with a log entry.
 
 ### 3. jq Availability
-The script requires `jq` for JSON validation, formatting, and dialog/listitem JSON merging. If `jq` is unavailable, `4.0.0b6` exits during pre-flight with a fatal dependency message.
+The script requires `jq` for JSON validation, formatting, and dialog/listitem JSON merging. If `jq` is unavailable, `4.0.0b6.1` exits during pre-flight with a fatal dependency message.
 
 ### 4. swiftDialog Version
 The script requires swiftDialog ≥ 3.1.0.4976. If the installed version is older (or swiftDialog is absent), the script downloads and installs the latest release from GitHub before proceeding.
@@ -228,10 +228,10 @@ If `webhookURL` (Parameter 5) is populated and failures are detected, `quitScrip
 At the end of the run, `generateAndSendSplunkReport()` writes the canonical local JSON report and, when `splunkOperationMode=production` plus Parameters 7 and 8 are configured, optionally delivers a Splunk HEC envelope. `splunkOperationMode=off` or `test` still generates the report but skips network transmission.
 
 ### 10. Self Service Inspect Summary
-In `Self Service`, the script uses finalized in-memory results to generate `/var/tmp/MacHealthCheck-Inspect-Config.json`, then tries to launch a detached swiftDialog Inspect Mode `preset6` guided summary. On a normal run, the existing `completionTimer` countdown remains on the main dialog whether the detached summary launches or not.
+In `Self Service`, the script uses finalized in-memory results to generate `/var/tmp/MacHealthCheck-Inspect-Config.json`, then tries to launch a detached swiftDialog Inspect Mode fixed Preset 6 guided summary. On a normal run, the existing `completionTimer` countdown remains on the main dialog whether the detached summary launches or not. Set `inspectSummaryPreset="off"` to skip both the handoff generation and detached launch.
 
 ### 11. Self Service Cached Replay
-If `/var/tmp/MacHealthCheck-Inspect-Config.json` is less than 15 minutes old and the cached inspect JSON still validates, a rerun in `Self Service` skips health checks entirely, launches the cached `preset6` guided summary immediately, and exits without showing the main dialog countdown.
+If `/var/tmp/MacHealthCheck-Inspect-Config.json` is less than 15 minutes old and the cached inspect JSON still validates, a rerun in `Self Service` skips health checks entirely, launches the cached fixed Preset 6 guided summary immediately, and exits without showing the main dialog countdown. Setting `inspectSummaryPreset="off"` disables this replay path.
 
 ### 12. Failure Notification
 When non-`Silent` runs detect failures, `displayFailureNotification()` launches a persistent swiftDialog pseudo-alert summarizing the failed health checks and offering a support action link.
@@ -244,8 +244,8 @@ When non-`Silent` runs detect failures, `displayFailureNotification()` launches 
 |---|---|---|
 | Fatal: Not root | `EUID != 0` | Yes (`[FATAL ERROR]`) |
 | Normal: Silent | All checks complete, no UI | Yes |
-| Normal: Self Service | Detached `preset6` guided summary launches after report generation and the main dialog still completes its normal countdown | Yes |
-| Replay: Self Service cached summary | Fresh inspect config launches cached `preset6` guided summary and skips the health-check loop | Yes |
+| Normal: Self Service | Detached fixed Preset 6 guided summary launches after report generation and the main dialog still completes its normal countdown | Yes |
+| Replay: Self Service cached summary | Fresh inspect config launches cached fixed Preset 6 guided summary and skips the health-check loop | Yes |
 | Normal: Test | Current vendor list items simulated as success | Yes |
 | Normal: With failure notification | Non-`Silent` failures trigger pseudo-alert summary | Yes |
 | Normal: With webhook | Failed run posts webhook before report generation and final UI cleanup | Yes |

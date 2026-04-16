@@ -1,14 +1,15 @@
 # Mac Health Check: Health Check Reference
 
-This text-only reference documents the key configurable defaults and runtime inventory for Mac Health Check `4.0.0b6`. No diagram is included; use [03-health-check-categories.md](03-health-check-categories.md) for a visual overview.
+This text-only reference documents the key configurable defaults and runtime inventory for Mac Health Check `4.0.0b6.1`. No diagram is included; use [03-health-check-categories.md](03-health-check-categories.md) for a visual overview.
 
 ---
 
-## 4.0.0b6 Runtime Notes
+## 4.0.0b6.1 Runtime Notes
 
-- `operationMode` is documented for the `4.0.0b6` release as `Self Service` by default, with `Silent`, `Debug`, `Development`, and `Test` also supported.
-- `Self Service` runs now generate a readable inspect-summary config, launch a detached swiftDialog Inspect Mode `preset6` guided summary after the canonical report is written, and retain the normal main-dialog completion countdown during full runs.
+- `operationMode` is documented for the `4.0.0b6.1` release as `Self Service` by default, with `Silent`, `Debug`, `Development`, and `Test` also supported.
+- `Self Service` runs now generate a readable inspect-summary config, launch a detached swiftDialog Inspect Mode fixed Preset 6 guided summary after the canonical report is written, and retain the normal main-dialog completion countdown during full runs.
 - Re-running in `Self Service` within 15 minutes can replay the cached inspect summary immediately when the handoff assets are still valid.
+- `inspectSummaryPreset` is an `on` / `off` toggle: `on` enables the fixed Preset 6 inspect summary and cached replay, while `off` disables both behaviors entirely.
 - Non-`Silent` runs with failures trigger `displayFailureNotification()`, which presents a persistent swiftDialog pseudo-alert summary of failed health checks.
 - Pre-flight requires swiftDialog `3.1.0.4976` or newer.
 - When `enableDockIntegration` is `true`, non-`Silent` runs show a Dock icon with a decreasing `dockiconbadge` count.
@@ -65,7 +66,7 @@ The support/help experience uses both legacy support fields and dynamic `support
 | `supportLabel1`–`supportLabel6` | Mixed defaults / blanks | Dynamic support labels shown in the help message |
 | `supportValue1`–`supportValue6` | Mixed defaults / blanks | Matching dynamic support values; empty pairs are skipped |
 
-**4.0.0b6 behavior notes**
+**4.0.0b6.1 behavior notes**
 
 - If all `supportLabelN` / `supportValueN` pairs are blank, the script falls back to the legacy `supportTeam*` and KB values.
 - The first URL-like `supportValueN` becomes the Info button action in the dialog.
