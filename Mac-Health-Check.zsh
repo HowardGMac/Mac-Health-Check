@@ -17,7 +17,7 @@
 #
 # HISTORY
 #
-# Version 4.0.0b4, 16-Apr-2026, Dan K. Snelson (@dan-snelson)
+# Version 4.0.0b6, 16-Apr-2026, Dan K. Snelson (@dan-snelson)
 # - Added JSON health reporting (with optional Splunk HTTP Event Collector (HEC) delivery)
 # - Added a detached swiftDialog Inspect Mode (i.e., `inspectSummaryPreset`) summary plus cached replay (i.e., `inspectReplayMaximumAgeSeconds`) for `Self Service` runs
 # - Refactored `checkElectronCornerMask` to reduce execution time
@@ -36,7 +36,7 @@
 export PATH=/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin/
 
 # Script Version
-scriptVersion="4.0.0b4"
+scriptVersion="4.0.0b6"
 
 # Client-side Log
 scriptLog="/var/log/org.churchofjesuschrist.log"
@@ -181,7 +181,7 @@ splunkJSONReportPath="/var/tmp/MacHealthCheck-Report.json"
 inspectCompliancePlistPath="/var/tmp/MacHealthCheck-Inspect-Compliance.plist"
 inspectConfigPath="/var/tmp/MacHealthCheck-Inspect-Config.json"
 inspectLaunchLogPath="/var/tmp/MacHealthCheck-Inspect-Summary.log"
-inspectSummaryPreset="3"
+inspectSummaryPreset="6"
 inspectReplayMaximumAgeSeconds="9000"
 splunkPrettyPrintJSON="false"
 splunkReportDebug="false"
