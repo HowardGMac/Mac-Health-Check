@@ -18,12 +18,10 @@
 # HISTORY
 #
 # Version 4.0.0b3, 16-Apr-2026, Dan K. Snelson (@dan-snelson)
-#   - Added secure JSON health reporting with optional Splunk HTTP Event Collector (HEC) delivery
-#   - Added per-check structured result collection, centralized final health-status calculation,
-#     and local JSON report persistence with validation, pretty-print debug mode, and root-only permissions
-#   - Added jq-optional JSON helper fallbacks plus `splunkOperationMode`, `splunkHECURL`,
-#     `splunkHECToken`, `customReportFieldsJSON`, and `reportDebug` for enterprise reporting workflows
-#   - Refactored `checkElectronCornerMask` to reduce execution time
+# - Added JSON health reporting (with optional Splunk HTTP Event Collector (HEC) delivery)
+# - Added a standalone swiftDialog Inspect Mode `preset5` summary for `Self Service` runs
+# - Raised the minimum required swiftDialog version to `3.1.0.4976`
+# - Refactored `checkElectronCornerMask` to reduce execution time
 #
 ####################################################################################################
 
@@ -62,7 +60,7 @@ SECONDS="0"
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 # Parameter 4: Operation Mode [ Debug | Development | Self Service | Silent | Test ]
-operationMode="${4:-"Development"}"
+operationMode="${4:-"Self Service"}"
 
     # Enable `set -x` if operation mode is "Debug" to help identify issues
     [[ "${operationMode}" == "Debug" ]] && set -x
@@ -70,7 +68,7 @@ operationMode="${4:-"Development"}"
 # Parameter 5: Microsoft Teams or Slack Webhook URL [ Leave blank to disable (default) | https://microsoftTeams.webhook.com/URL | https://hooks.slack.com/services/URL ]
 webhookURL="${5:-""}"
 
-# === NEW IN 4.0.0b3 ===
+# --- New in `4.0.0` ------------------------------------------------------------------------------
 # Parameter 6: Splunk reporting mode [ off | test | production ]
 splunkOperationMode="${6:-"test"}"
 
@@ -177,7 +175,7 @@ excessiveUptimeAlertStyle="warning"
 # Completion Timer (in seconds)
 completionTimer="60"
 
-# === NEW IN 4.0.0b3 ===
+# --- New in `4.0.0` ------------------------------------------------------------------------------
 # Splunk and JSON reporting defaults
 splunkJSONReportPath="/var/tmp/MacHealthCheck-Report.json"
 splunkPrettyPrintJSON="false"
@@ -199,7 +197,7 @@ reportTimestamp=""
 reportTimestampEpoch=""
 reportFilePayload=""
 reportHECPayload=""
-reportJSONTool="zsh"
+reportJSONTool="jq"
 exitCode="0"
 overallHealth=""
 errorCount="0"
@@ -866,13 +864,7 @@ function validateJson() {
 
     local jsonPayload="${1}"
 
-    if command -v jq >/dev/null 2>&1; then
-        printf '%s' "${jsonPayload}" | jq . >/dev/null 2>&1
-    else
-        JSON_INPUT="${jsonPayload}" osascript -l JavaScript \
-            -e 'const env = $.NSProcessInfo.processInfo.environment.objectForKey("JSON_INPUT"); JSON.parse(ObjC.unwrap(env));' \
-            >/dev/null 2>&1
-    fi
+    printf '%s' "${jsonPayload}" | jq . >/dev/null 2>&1
 
 }
 
@@ -880,12 +872,7 @@ function compactJson() {
 
     local jsonPayload="${1}"
 
-    if command -v jq >/dev/null 2>&1; then
-        printf '%s' "${jsonPayload}" | jq -c .
-    else
-        JSON_INPUT="${jsonPayload}" osascript -l JavaScript \
-            -e 'const env = $.NSProcessInfo.processInfo.environment.objectForKey("JSON_INPUT"); const parsed = JSON.parse(ObjC.unwrap(env)); JSON.stringify(parsed);'
-    fi
+    printf '%s' "${jsonPayload}" | jq -c .
 
 }
 
@@ -893,27 +880,15 @@ function prettyPrintJson() {
 
     local jsonPayload="${1}"
 
-    if command -v jq >/dev/null 2>&1; then
-        printf '%s' "${jsonPayload}" | jq .
-    else
-        JSON_INPUT="${jsonPayload}" osascript -l JavaScript \
-            -e 'const env = $.NSProcessInfo.processInfo.environment.objectForKey("JSON_INPUT"); const parsed = JSON.parse(ObjC.unwrap(env)); JSON.stringify(parsed, null, 2);'
-    fi
+    printf '%s' "${jsonPayload}" | jq .
 
 }
 
 function jsonIsObject() {
 
     local jsonPayload="${1}"
-    local objectCheck=""
 
-    objectCheck="$(
-        JSON_INPUT="${jsonPayload}" osascript -l JavaScript \
-            -e 'const env = $.NSProcessInfo.processInfo.environment.objectForKey("JSON_INPUT"); const parsed = JSON.parse(ObjC.unwrap(env)); (parsed && typeof parsed === "object" && !Array.isArray(parsed)) ? "true" : "false";' \
-            2>/dev/null
-    )"
-
-    [[ "${objectCheck}" == "true" ]]
+    printf '%s' "${jsonPayload}" | jq -e 'type == "object"' >/dev/null 2>&1
 
 }
 
@@ -922,15 +897,7 @@ function mergeDialogAndListItems() {
     local dialogJSON="${1}"
     local listitemJSON="${2}"
 
-    if command -v jq >/dev/null 2>&1; then
-        jq -n --argjson dialog "${dialogJSON}" --argjson listitems "${listitemJSON}" '$dialog + { "listitem": $listitems }'
-    else
-        JSON_DIALOG="${dialogJSON}" JSON_LISTITEMS="${listitemJSON}" osascript -l JavaScript \
-            -e 'const env = $.NSProcessInfo.processInfo.environment;' \
-            -e 'const dialog = JSON.parse(ObjC.unwrap(env.objectForKey("JSON_DIALOG")));' \
-            -e 'const listitems = JSON.parse(ObjC.unwrap(env.objectForKey("JSON_LISTITEMS")));' \
-            -e 'dialog.listitem = listitems; JSON.stringify(dialog);'
-    fi
+    jq -n --argjson dialog "${dialogJSON}" --argjson listitems "${listitemJSON}" '$dialog + { "listitem": $listitems }'
 
 }
 
@@ -1719,7 +1686,7 @@ function get_json_value() {
 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-# === NEW IN 4.0.0b3 ===
+# --- New in `4.0.0` ------------------------------------------------------------------------------
 # Result-collection Helpers
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
@@ -1974,7 +1941,7 @@ function getCheckStatusByTitle() {
 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-# === NEW IN 4.0.0b3 ===
+# --- New in `4.0.0` ------------------------------------------------------------------------------
 # Splunk Reporting Helpers
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
@@ -2778,10 +2745,10 @@ fi
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 if command -v jq &> /dev/null; then
-    preFlight "jq found; using jq for JSON validation and formatting where available."
+    preFlight "jq found; using jq for JSON validation and formatting."
     reportJSONTool="jq"
 else
-    preFlight "jq not found; falling back to JXA / pure-Zsh JSON helpers."
+    fatal "jq is required for JSON validation and formatting; install jq before running Mac Health Check on Macs that do not bundle it by default."
 fi
 
 

@@ -1,13 +1,13 @@
 # Mac Health Check: Operation Modes
 
-This diagram compares all five `4.0.0b3` Mac Health Check operation modes, showing how each mode differs in terms of UI, Dock behavior, logging, and intended use case.
+This diagram compares all five `4.0.0b4` Mac Health Check operation modes, showing how each mode differs in terms of UI, Dock behavior, logging, and intended use case.
 
 ```mermaid
 graph TB
     ENTRY(["Mac-Health-Check.zsh<br>Parameter 4: operationMode"])
 
     subgraph SelfService["🖥️ Self Service (Default)"]
-        SS_DESC["Trigger: User via MDM Self Service<br>UI: Full swiftDialog dialog<br>Anticipation: 2s between checks<br>Dock badge: Yes (when enabled)<br>Completion timer: 60s auto-close<br>Logging: Full structured log"]
+        SS_DESC["Trigger: User via MDM Self Service<br>UI: Full swiftDialog dialog + detached preset5 summary<br>Anticipation: 2s between checks<br>Dock badge: Yes (when enabled)<br>Completion timer: Fallback only if inspect handoff fails<br>Logging: Full structured log"]
         SS_USE["Use case:<br>End-user–initiated health check<br>on-demand via Self Service"]
 
         style SS_DESC fill:#e1f5ff
@@ -68,7 +68,8 @@ graph TB
 | **swiftDialog UI** | Full dialog | None | Full dialog | Curated dev subset | Full dialog |
 | **Anticipation delay** | 2 seconds | 0 seconds | 2 seconds | 2 seconds | 2 seconds |
 | **Dock badge** | Yes (when enabled) | No | Yes (when enabled) | Yes (when enabled) | Yes (when enabled) |
-| **Completion timer** | 60s (configurable) | N/A | 60s (configurable) | 60s (configurable) | 60s (configurable) |
+| **Completion timer** | Fallback only if inspect handoff fails | N/A | 60s (configurable) | 60s (configurable) | 60s (configurable) |
+| **Detached inspect summary** | Yes (`preset5`) | No | No | No | No |
 | **Logging** | Full | Full | Full + `set -x` | Full structured log | Full structured log |
 | **Persistent failure notification** | If failures | No | If failures | If failures | No |
 | **Real check data** | Yes | Yes | Yes | Yes (curated subset) | No (simulated pass results) |
@@ -79,7 +80,7 @@ graph TB
 ## Mode Details
 
 ### Self Service (Default)
-The primary end-user-facing mode. Launched by a user clicking the Mac Health Check policy in MDM Self Service. Displays a full swiftDialog dialog with real-time status updates as each check runs. When Dock integration is enabled, the Dock badge counts down remaining checks. The dialog auto-closes after the `completionTimer` countdown (default: 60 seconds), or the user can dismiss it manually.
+The primary end-user-facing mode. Launched by a user clicking the Mac Health Check policy in MDM Self Service. Displays the full swiftDialog progress dialog with real-time status updates as each check runs. When Dock integration is enabled, the Dock badge counts down remaining checks. After report generation, successful runs hand off to a detached Inspect Mode `preset5` summary and close the main dialog immediately; if that handoff fails, the script falls back to the existing `completionTimer` countdown.
 
 **When to use:** Standard deployment for user-initiated compliance checks.
 
@@ -93,7 +94,7 @@ Runs all health checks without displaying any user interface. Intended for sched
 ---
 
 ### Debug
-Similar to Self Service, but with `set -x` tracing enabled plus swiftDialog debug launch arguments (`--verbose --resizable --debug red`). In `4.0.0b3`, Debug mode also enables pretty-printed local JSON reporting. This makes it easier to identify which part of the zsh script or dialog rendering is causing unexpected behavior.
+Similar to Self Service, but with `set -x` tracing enabled plus swiftDialog debug launch arguments (`--verbose --resizable --debug red`). In `4.0.0b4`, Debug mode also enables pretty-printed local JSON reporting, while intentionally retaining the existing countdown-based ending instead of launching the detached inspect summary. This makes it easier to identify which part of the zsh script or dialog rendering is causing unexpected behavior.
 
 **When to use:** Diagnosing why a specific check is failing or returning an unexpected status.
 

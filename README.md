@@ -1,6 +1,6 @@
 ![GitHub release (latest by date)](https://img.shields.io/github/v/release/dan-snelson/Mac-Health-Check?display_name=tag) ![GitHub pre-release (latest by date)](https://img.shields.io/github/v/release/dan-snelson/Mac-Health-Check?display_name=tag&include_prereleases) ![GitHub issues](https://img.shields.io/github/issues-raw/dan-snelson/Mac-Health-Check) ![GitHub closed issues](https://img.shields.io/github/issues-closed-raw/dan-snelson/Mac-Health-Check) ![GitHub pull requests](https://img.shields.io/github/issues-pr-raw/dan-snelson/Mac-Health-Check) ![GitHub closed pull requests](https://img.shields.io/github/issues-pr-closed-raw/dan-snelson/Mac-Health-Check)
 
-# Mac Health Check (4.0.0b3)
+# Mac Health Check (4.0.0b4)
 
 > Another pleasant update to the practical, MDM-agnostic, user-friendly approach to surfacing Mac compliance information directly to end-users via your MDM's self-service app
 
@@ -16,7 +16,9 @@ Deployment of Mac Health Check involves configuring organizational defaults, emb
 
 Administrators can customize the user interface using swiftDialog’s visual capabilities, making the experience both informative and approachable.
 
-The tool logs results for review, writes a structured JSON health report locally, can optionally forward that report to Splunk HEC, and continues to avoid altering device configuration. The `Silent` operation mode keeps Mac Health Check well-suited for background IT visibility without end-user intrusion.
+The tool logs results for review, writes a structured JSON health report locally, can optionally forward that report to Splunk HEC, and continues to avoid altering device configuration. In `Self Service`, `4.0.0b4` can now hand off to a detached swiftDialog Inspect Mode `preset5` summary built from finalized report data, while `Silent` remains well-suited for background IT visibility without end-user intrusion.
+
+The current `4.0.0b4` beta expects swiftDialog `3.1.0.4976` or newer so `Self Service` can launch the detached inspect summary.
 
 <a href="https://www.youtube.com/watch?v=rDPoYlSSEtQ&t=36s" target="_blank"><img src="images/Mac_Health_Check Presentation.png" alt="Rocketman Tech December 2025 Meetup" width="600"/><br />Rocketman Tech December 2025 Meetup</a> (05-Dec-2025)
 
@@ -53,9 +55,9 @@ Mac Health Check is particularly valuable in IT support workflows, serving as an
 - If dock icon setup fails, Mac Health Check logs a warning and falls back to the default `/usr/local/bin/dialog` launch path
 
 ## Features
-The following health checks and information reporting are included in version `4.0.0b3`, which operates in `Self Service` mode by default. (Change `operationMode` to `Debug`, `Development` or `Test` when getting ready to deploy in production.)
+The following health checks and information reporting are included in version `4.0.0b4`, which operates in `Self Service` mode by default. (Change `operationMode` to `Debug`, `Development` or `Test` when getting ready to deploy in production.)
 
-> :new: Mac Health Check version `4.0.0b3` adds secure JSON report generation plus optional Splunk HEC delivery, while retaining the `3.2.0` persistent failed-health notification behavior.
+> :new: Mac Health Check version `4.0.0b4` retains secure JSON report generation and optional Splunk HEC delivery, while adding a detached `Self Service` Inspect Mode `preset5` summary and keeping the current persistent failed-health notification behavior.
  
 <img src="images/MHC_3.2.0_failure_notification.png" alt="Health Checks" width="400"/>
 
@@ -117,10 +119,18 @@ The following health checks and information reporting are included in version `4
 #### :new: JSON / Splunk Reporting
 - Generates a structured JSON health report at the end of every run
 - Saves the report locally to `/var/tmp/MacHealthCheck-Report.json` by default with `600` permissions
+- Keeps `/var/tmp/MacHealthCheck-Report.json` as the canonical root-only report artifact
 - Supports optional Splunk HEC delivery through Parameters 6-10 without changing the existing `operationMode` contract
 - Supports `splunkOperationMode=off` to disable HEC delivery explicitly while still preserving local JSON report generation
 - Preserves local report generation in `splunkOperationMode=test` while intentionally skipping network transmission
-- Uses jq when available and falls back to JXA / pure-Zsh helpers for validation and formatting when jq is absent
+- Requires `jq` for JSON validation and formatting, with local report generation and Splunk payload assembly stopping at pre-flight if `jq` is unavailable
+
+#### :new: Self Service Inspect Summary
+- `Self Service` runs now generate `/var/tmp/MacHealthCheck-Inspect-Compliance.plist` and `/var/tmp/MacHealthCheck-Inspect-Config.json` from finalized in-memory results
+- The main progress dialog closes immediately after a successful handoff to a detached swiftDialog Inspect Mode `preset5` summary, so Jamf Pro Self Service is not held by the original script process
+- Unhealthy `Self Service` runs still show the existing persistent failure pseudo-alert before the inspect summary launches
+- If inspect-summary asset generation or launch fails, Mac Health Check falls back to the existing `completionTimer` countdown path
+- Requires swiftDialog `3.1.0.4976` or newer
 
 #### IT Support
 - Dynamic `supportLabel1` / `supportValue1` through `supportLabel6` / `supportValue6`
@@ -162,7 +172,7 @@ The following health checks and information reporting are included in version `4
 ### Policy Log Reporting
 
 ```
-MHC (4.0.0b3): 2026-03-28 03:43:13 - [NOTICE] WARNING: 'localadmin' IS A MEMBER OF 'admin';
+MHC (4.0.0b4): 2026-03-28 03:43:13 - [NOTICE] WARNING: 'localadmin' IS A MEMBER OF 'admin';
 User: macOS Server Administrator (localadmin) [503] staff everyone localaccounts _appserverusr 
 admin _appserveradm com.apple.sharepoint.group.4 com.apple.sharepoint.group.3
 com.apple.sharepoint.group.1 _appstore _lpadmin _lpoperator _developer _analyticsusers
@@ -210,7 +220,7 @@ Deployment of Mac Health Check involves configuring organizational defaults, upl
 
 A new "Development" Operation Mode has been added to aid in developing Health Checks, allowing the easy execution of a _single_ Health Check.
 
-When `operationMode` is set to `Development`, the current `4.0.0b3` implementation uses a dedicated `developmentListitemJSON` for a single `Microsoft Teams` check instead of running the entire suite.
+When `operationMode` is set to `Development`, the current `4.0.0b4` implementation uses a dedicated `developmentListitemJSON` for a single `Microsoft Teams` check instead of running the entire suite.
 
 ```zsh
 ####################################################################################################

@@ -1,6 +1,6 @@
 # Mac Health Check: Script Execution Flow
 
-This flowchart documents the `4.0.0b3` decision logic executed each time Mac Health Check runs, from the initial invocation through pre-flight validation, health check execution, and final output.
+This flowchart documents the `4.0.0b4` decision logic executed each time Mac Health Check runs, from the initial invocation through pre-flight validation, health check execution, and final output.
 
 ```mermaid
 graph TB
@@ -31,8 +31,8 @@ graph TB
     subgraph PreFlight["✈️ Pre-flight Checks"]
         PREFLIGHT_START["Initialize client log<br>/var/log/org.churchofjesuschrist.log"]
         ROOTCHECK{"Running as root?"}
-        JSONTOOLS["Select JSON helpers<br>Prefer jq when available;<br>otherwise use JXA / pure-Zsh"]
-        SDCHECK{"swiftDialog<br>≥ 3.0.1.4955?"}
+        JSONTOOLS["Require jq<br>for JSON validation,<br>formatting, and merge helpers"]
+        SDCHECK{"swiftDialog<br>≥ 3.1.0.4976?"}
         SDINSTALL["Download & install<br>swiftDialog from GitHub"]
         KILLSD["Kill existing<br>Dialog instances"]
         DOCKBADGE["Prepare Dock launch state<br>and initial badge<br>(non-Silent when enabled)"]
@@ -142,22 +142,29 @@ graph TB
         NOTIFY["Display persistent failure notification<br>swiftDialog pseudo-alert"]
         WEBHOOK{"webhookURL<br>configured?"}
         SENDWEBHOOK["Post failure summary<br>to Teams or Slack"]
+        REPORT["Write canonical local JSON report<br>and optional Splunk HEC payload"]
         COMPLETIONUI{"Non-Silent mode?"}
+        INSPECTHANDOFF{"Self Service inspect handoff<br>succeeds?"}
+        INSPECT["Launch detached preset5 summary<br>quit main dialog immediately"]
         COMPLETIONTIMER["Display completion timer<br>enable Close button"]
         CLEANUP["Remove temp files<br>clear Dock badge"]
         EXIT(["⏹ Script Exits"])
 
         FINALSTATE --> FAILURES
         FAILURES -->|Yes| FAILNOTICE
-        FAILURES -->|No| COMPLETIONUI
+        FAILURES -->|No| REPORT
         FAILNOTICE -->|Yes| NOTIFY
         FAILNOTICE -->|No| WEBHOOK
         NOTIFY --> WEBHOOK
         WEBHOOK -->|Yes| SENDWEBHOOK
-        WEBHOOK -->|No| COMPLETIONUI
-        SENDWEBHOOK --> COMPLETIONUI
-        COMPLETIONUI -->|Yes| COMPLETIONTIMER
+        WEBHOOK -->|No| REPORT
+        SENDWEBHOOK --> REPORT
+        REPORT --> COMPLETIONUI
+        COMPLETIONUI -->|Yes| INSPECTHANDOFF
         COMPLETIONUI -->|No| CLEANUP
+        INSPECTHANDOFF -->|Yes| INSPECT
+        INSPECTHANDOFF -->|No| COMPLETIONTIMER
+        INSPECT --> CLEANUP
         COMPLETIONTIMER --> CLEANUP
         CLEANUP --> EXIT
 
@@ -167,7 +174,10 @@ graph TB
         style NOTIFY fill:#c8e6c9
         style WEBHOOK fill:#ffecb3
         style SENDWEBHOOK fill:#c8e6c9
+        style REPORT fill:#c8e6c9
         style COMPLETIONUI fill:#ffecb3
+        style INSPECTHANDOFF fill:#ffecb3
+        style INSPECT fill:#c8e6c9
         style COMPLETIONTIMER fill:#cfd8dc
         style CLEANUP fill:#c8e6c9
     end
@@ -186,10 +196,10 @@ Set via MDM policy parameter. Determines UI behavior and which checks execute. T
 The script must run as root. If not, it calls `fatal()` and exits immediately with a log entry.
 
 ### 3. jq Availability
-The script prefers `jq` for JSON validation and formatting, but `4.0.0b3` falls back to JXA / pure-Zsh helpers when `jq` is unavailable.
+The script requires `jq` for JSON validation, formatting, and dialog/listitem JSON merging. If `jq` is unavailable, `4.0.0b4` exits during pre-flight with a fatal dependency message.
 
 ### 4. swiftDialog Version
-The script requires swiftDialog ≥ 3.0.1.4955. If the installed version is older (or swiftDialog is absent), the script downloads and installs the latest release from GitHub before proceeding.
+The script requires swiftDialog ≥ 3.1.0.4976. If the installed version is older (or swiftDialog is absent), the script downloads and installs the latest release from GitHub before proceeding.
 
 ### 5. Dock Integration
 If `enableDockIntegration` is `true` and the mode is not `Silent`, the script resolves the Dock icon, attempts a named `Dialog.app` launch so Dock hover text matches the script name, initializes `dockiconbadge`, and falls back to the standard dialog binary if the Dock-enabled launch fails.
@@ -208,9 +218,12 @@ Each health check function returns one of four statuses posted to swiftDialog vi
 If `webhookURL` (Parameter 5) is populated and failures are detected, `quitScript()` posts a JSON payload to Microsoft Teams or Slack summarizing failed checks. The payload auto-detects the webhook type from the URL.
 
 ### 9. JSON Report + Splunk Delivery
-At the end of the run, `generateAndSendSplunkReport()` writes a structured local JSON report and, when `splunkOperationMode=production` plus Parameters 7 and 8 are configured, optionally delivers a Splunk HEC envelope. `splunkOperationMode=off` or `test` still generates the report but skips network transmission.
+At the end of the run, `generateAndSendSplunkReport()` writes the canonical local JSON report and, when `splunkOperationMode=production` plus Parameters 7 and 8 are configured, optionally delivers a Splunk HEC envelope. `splunkOperationMode=off` or `test` still generates the report but skips network transmission.
 
-### 10. Failure Notification
+### 10. Self Service Inspect Summary
+In `Self Service`, the script uses finalized in-memory results to generate `/var/tmp/MacHealthCheck-Inspect-Compliance.plist` and `/var/tmp/MacHealthCheck-Inspect-Config.json`, then tries to launch a detached swiftDialog Inspect Mode `preset5` summary. If that handoff succeeds, the main dialog closes immediately; if not, the script falls back to the existing `completionTimer` countdown.
+
+### 11. Failure Notification
 When non-`Silent` runs detect failures, `displayFailureNotification()` launches a persistent swiftDialog pseudo-alert summarizing the failed health checks and offering a support action link.
 
 ---
@@ -221,7 +234,7 @@ When non-`Silent` runs detect failures, `displayFailureNotification()` launches 
 |---|---|---|
 | Fatal: Not root | `EUID != 0` | Yes (`[FATAL ERROR]`) |
 | Normal: Silent | All checks complete, no UI | Yes |
-| Normal: Self Service | User dismisses or timer expires | Yes |
+| Normal: Self Service | Detached `preset5` summary launches and main dialog quits immediately, or the countdown fallback is used if handoff fails | Yes |
 | Normal: Test | Current vendor list items simulated as success | Yes |
 | Normal: With failure notification | Non-`Silent` failures trigger pseudo-alert summary | Yes |
-| Normal: With webhook | Failed run posts webhook before final countdown/cleanup | Yes |
+| Normal: With webhook | Failed run posts webhook before report generation and final UI cleanup | Yes |

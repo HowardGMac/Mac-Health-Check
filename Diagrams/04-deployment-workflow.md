@@ -1,6 +1,6 @@
 # Mac Health Check: Deployment Workflow
 
-This diagram provides a step-by-step guide for deploying the `4.0.0b3` release of Mac Health Check through an MDM solution. Follow the phases in order for a successful deployment.
+This diagram provides a step-by-step guide for deploying the `4.0.0b4` release of Mac Health Check through an MDM solution. Follow the phases in order for a successful deployment.
 
 ```mermaid
 graph TB
@@ -8,7 +8,7 @@ graph TB
 
     subgraph Phase1["Phase 1: Prerequisites"]
         P1A["Confirm MDM solution<br>Jamf Pro · Kandji · Intune · Mosyle<br>JumpCloud · Addigy · Filewave · Fleet"]
-        P1B["Confirm prerequisites<br>jq present; swiftDialog<br>preinstalled or installable"]
+        P1B["Confirm prerequisites<br>jq required; swiftDialog<br>preinstalled or installable"]
         P1C["Download Mac-Health-Check.zsh<br>from GitHub repository"]
 
         START --> P1A
@@ -163,7 +163,7 @@ graph TB
 Before deploying Mac Health Check, confirm:
 
 - [ ] An MDM solution is in place (Jamf Pro, Kandji, Microsoft Intune, Mosyle, JumpCloud, Addigy, Filewave, or Fleet)
-- [ ] `jq` is present on target Macs
+- [ ] `jq` is present on target Macs that do not already bundle it
 - [ ] `swiftDialog` is approved for your environment and is either preinstalled or allowed to auto-install/update
 - [ ] You have downloaded the latest `Mac-Health-Check.zsh` from the [GitHub repository](https://github.com/dan-snelson/Mac-Health-Check)
 
@@ -189,7 +189,7 @@ Open `Mac-Health-Check.zsh` and review the **Organization Variables** and **IT S
 | `allowedUptimeMinutes` | `10080` (7 days) | Uptime warning threshold |
 | `allowedMinimumFreeDiskPercentage` | `10` | Free disk error threshold |
 | `previousMinorOS` | `2` | How many older macOS versions are compliant |
-| `completionTimer` | `60` | Dialog auto-close (seconds) |
+| `completionTimer` | `60` | Fallback dialog auto-close (seconds) |
 
 `webhookURL` is configured as **Parameter 5** in the MDM policy, not as a long-lived script default. Splunk reporting is likewise enabled through runtime parameters rather than hard-coded tokens in the script.
 
@@ -252,7 +252,7 @@ Use the three developer-oriented modes to validate behavior before rolling out t
 After production deployment, monitor:
 
 - **Client logs** at `/var/log/org.churchofjesuschrist.log` on managed Macs — look for `[WARNING]` and `[ERROR]` entries
-- **Dock badge and persistent failure notifications** on test Macs in non-`Silent` modes — confirm countdown badges update per check and failed runs show the current pseudo-alert summary and support action
+- **Dock badge, inspect summary handoff, and persistent failure notifications** on test Macs in non-`Silent` modes — confirm countdown badges update per check, `Self Service` launches the detached preset5 summary, and failed runs still show the current pseudo-alert summary and support action
 - **Webhook notifications** in Teams or Slack (if configured) — review failure summaries
 - **MDM inventory** — for Jamf Pro, each run can trigger a recon; use Smart Group criteria based on extension attributes for fleet-wide compliance visibility
 

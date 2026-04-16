@@ -1,14 +1,15 @@
 # Mac Health Check: Health Check Reference
 
-This text-only reference documents the key configurable defaults and runtime inventory for Mac Health Check `4.0.0b3`. No diagram is included; use [03-health-check-categories.md](03-health-check-categories.md) for a visual overview.
+This text-only reference documents the key configurable defaults and runtime inventory for Mac Health Check `4.0.0b4`. No diagram is included; use [03-health-check-categories.md](03-health-check-categories.md) for a visual overview.
 
 ---
 
-## 4.0.0b3 Runtime Notes
+## 4.0.0b4 Runtime Notes
 
-- `operationMode` is documented for the `4.0.0b3` release as `Self Service` by default, with `Silent`, `Debug`, `Development`, and `Test` also supported.
+- `operationMode` is documented for the `4.0.0b4` release as `Self Service` by default, with `Silent`, `Debug`, `Development`, and `Test` also supported.
+- `Self Service` runs now generate readable inspect-summary handoff files and attempt to launch a detached swiftDialog Inspect Mode `preset5` summary after the canonical report is written.
 - Non-`Silent` runs with failures trigger `displayFailureNotification()`, which presents a persistent swiftDialog pseudo-alert summary of failed health checks.
-- Pre-flight requires swiftDialog `3.0.1.4955` or newer.
+- Pre-flight requires swiftDialog `3.1.0.4976` or newer.
 - When `enableDockIntegration` is `true`, non-`Silent` runs show a Dock icon with a decreasing `dockiconbadge` count.
 - `checkAvailableSoftwareUpdates()` includes deferred and DDM-enforced OS update handling.
 - `checkFreeDiskSpace()` prefers Finder-aligned available capacity and falls back to `diskutil info /` when needed.
@@ -45,7 +46,7 @@ Core UI and behavior defaults live in the **Organization Variables** section of 
 | `networkQualityTestMaximumAge` | `"1H"` | Maximum age of a cached network quality result before re-running | `date -v-` suffix: `y`, `m`, `w`, `d`, `H`, `M`, `S` |
 | `allowedUptimeMinutes` | `"10080"` | Uptime above this threshold triggers an alert (10,080 min = 7 days) | Integer string |
 | `excessiveUptimeAlertStyle` | `"warning"` | Severity when uptime exceeds `allowedUptimeMinutes` | `warning` \| `error` |
-| `completionTimer` | `"60"` | Seconds before the final dialog auto-closes | Integer string |
+| `completionTimer` | `"60"` | Seconds before the fallback final dialog countdown auto-closes | Integer string |
 
 ---
 
@@ -63,7 +64,7 @@ The support/help experience uses both legacy support fields and dynamic `support
 | `supportLabel1`–`supportLabel6` | Mixed defaults / blanks | Dynamic support labels shown in the help message |
 | `supportValue1`–`supportValue6` | Mixed defaults / blanks | Matching dynamic support values; empty pairs are skipped |
 
-**4.0.0b3 behavior notes**
+**4.0.0b4 behavior notes**
 
 - If all `supportLabelN` / `supportValueN` pairs are blank, the script falls back to the legacy `supportTeam*` and KB values.
 - The first URL-like `supportValueN` becomes the Info button action in the dialog.

@@ -1,6 +1,6 @@
 # Mac Health Check: System Architecture
 
-This diagram shows the `4.0.0b3` Mac Health Check ecosystem, from administrator customization through MDM deployment, client-side execution, user interaction, and results output.
+This diagram shows the `4.0.0b4` Mac Health Check ecosystem, from administrator customization through MDM deployment, client-side execution, user interaction, and results output.
 
 ```mermaid
 graph TB
@@ -42,7 +42,7 @@ graph TB
 
     subgraph Client["💻 Client Mac"]
         TRIGGER["Policy Trigger<br>User via Self Service<br>or scheduled run"]
-        PREFLIGHT["Pre-flight Checks<br>• Running as root?<br>• swiftDialog ≥ 3.0.1.4955 installed?<br>• JSON helpers selected<br>• Kill existing Dialog instances"]
+        PREFLIGHT["Pre-flight Checks<br>• Running as root?<br>• jq available?<br>• swiftDialog ≥ 3.1.0.4976 installed?<br>• Kill existing Dialog instances"]
         MDMDETECT["MDM Vendor Detection<br>Auto-detect from installed profiles:<br>Jamf Pro / Kandji / Intune / Mosyle<br>JumpCloud / Addigy / Filewave / Fleet"]
         CHECKLIST["Check Set Selection<br>Vendor-specific list<br>(27–38 checks)"]
 
@@ -62,31 +62,40 @@ graph TB
         DIALOG["swiftDialog<br>Interactive health check dialog<br>with live status updates<br>and optional Dock integration"]
         CHECKLOOP["Health Check Loop<br>System · User · Disk · MDM<br>Network · Apps · External"]
         STATUSES["Check Statuses<br>✅ pass · ⚠️ warning<br>❌ error · ⏭️ skipped"]
-        FINAL["Final Summary Dialog<br>Healthy / Unhealthy state<br>with countdown timer"]
+        FINAL["Final Main Dialog State<br>Healthy / Unhealthy title / icon"]
+        INSPECT["Detached Inspect Summary<br>Self Service only<br>swiftDialog preset5"]
 
         CHECKLIST -->|Initialize dialog| DIALOG
         DIALOG <-->|dialogUpdate per check| CHECKLOOP
         CHECKLOOP --> STATUSES
         STATUSES --> FINAL
+        FINAL -.->|Self Service handoff| INSPECT
 
         style DIALOG fill:#e1f5ff
         style CHECKLOOP fill:#b2dfdb
         style STATUSES fill:#fff4e6
         style FINAL fill:#cfd8dc
+        style INSPECT fill:#c8e6c9
     end
 
     subgraph Output["📤 Output"]
         LOG["Client Log<br>/var/log/org.churchofjesuschrist.log<br>Structured entries with prefixes:<br>PRE-FLIGHT · NOTICE · INFO<br>WARNING · ERROR · FATAL ERROR"]
+        REPORT["Local JSON Report<br>/var/tmp/MacHealthCheck-Report.json<br>Canonical root-only artifact"]
+        INSPECTFILES["Inspect Handoff Files<br>/var/tmp/MacHealthCheck-Inspect-*.plist/json<br>Readable by the logged-in user"]
         FAILNOTE["Failure Notification<br>Persistent swiftDialog pseudo-alert<br>(non-Silent, failures only)"]
         WEBHOOK["Webhook Notification<br>Microsoft Teams or Slack<br>(optional — param 5)"]
         INVENTORY["MDM Inventory Update<br>Via updateComputerInventory()<br>(Jamf Pro only)"]
 
         FINAL --> LOG
+        FINAL --> REPORT
+        INSPECT -.->|reads| INSPECTFILES
         FINAL -.->|if failures & non-Silent| FAILNOTE
         FINAL -.->|if webhookURL set & failures| WEBHOOK
         CHECKLOOP -.->|Jamf Pro only| INVENTORY
 
         style LOG fill:#c8e6c9
+        style REPORT fill:#c8e6c9
+        style INSPECTFILES fill:#c8e6c9
         style FAILNOTE fill:#c8e6c9
         style WEBHOOK fill:#c8e6c9
         style INVENTORY fill:#c8e6c9
@@ -113,7 +122,7 @@ Key settings administrators configure before deployment:
 - `allowedMinimumFreeDiskPercentage` — Free disk threshold
 - `allowedUptimeMinutes` — Uptime warning threshold
 - `supportLabel1`–`supportLabel6` / `supportValue1`–`supportValue6` — Dynamic support lines and Info button target
-- `completionTimer` — Dialog auto-close delay
+- `completionTimer` — Dialog auto-close delay for the fallback countdown path
 
 **`external-checks/`**
 Optional plugin scripts for third-party tools (BeyondTrust, Cisco Umbrella, CrowdStrike Falcon, GlobalProtect). Each plugin is uploaded to MDM as a separate policy and writes results to a shared defaults domain (`organizationDefaultsDomain`) for the main script to read.
@@ -135,8 +144,8 @@ Mac Health Check is MDM-agnostic and has been tested with eight MDM platforms. T
 **Pre-flight Checks**
 The script validates its environment before running any health checks:
 1. Confirms execution as root
-2. Verifies JSON tooling is available; prefers `jq` when installed and otherwise falls back to JXA / pure-Zsh helpers
-3. Checks for swiftDialog ≥ 3.0.1.4955 (installs from GitHub if missing)
+2. Verifies `jq` is available for JSON validation and formatting; exits during pre-flight if it is missing
+3. Checks for swiftDialog ≥ 3.1.0.4976 (installs from GitHub if missing)
 4. Kills any existing swiftDialog instances
 
 **MDM Vendor Detection**
@@ -146,13 +155,17 @@ The script inspects installed configuration profiles to identify the MDM vendor,
 
 ### Runtime Execution
 
-Health checks execute sequentially, with each result posted to the swiftDialog dialog via a named pipe (`dialogUpdate`) and captured into a structured per-check result collector for final reporting. When Dock integration is enabled, non-`Silent` runs also show a Dock icon with a decreasing badge count. After all checks complete, a final summary dialog appears with a countdown timer, non-`Silent` runs with failures also trigger a persistent swiftDialog pseudo-alert notification, and version `4.0.0b3` writes a final JSON health report before cleanup.
+Health checks execute sequentially, with each result posted to the swiftDialog dialog via a named pipe (`dialogUpdate`) and captured into a structured per-check result collector for final reporting. When Dock integration is enabled, non-`Silent` runs also show a Dock icon with a decreasing badge count. After all checks complete, the main dialog updates to its final healthy / unhealthy state, non-`Silent` runs with failures still trigger a persistent swiftDialog pseudo-alert notification, and `4.0.0b4` writes a final JSON health report before cleanup. In `Self Service`, a successful handoff then launches a detached Inspect Mode `preset5` summary and closes the main dialog immediately instead of waiting through the standard countdown.
 
 ---
 
 ### Output
 
 **Client Log** — Every run writes structured log entries to `/var/log/org.churchofjesuschrist.log` using prefixed log levels (`[PRE-FLIGHT]`, `[NOTICE]`, `[INFO]`, `[WARNING]`, `[ERROR]`, `[FATAL ERROR]`). Logs include computer name, serial number, user, OS version, and all check results.
+
+**JSON Report** — Every run writes the canonical report artifact to `/var/tmp/MacHealthCheck-Report.json` with root-only permissions. Optional Splunk HEC delivery wraps that same finalized report data rather than generating a second source of truth.
+
+**Inspect Summary** — `Self Service` runs also generate readable handoff files at `/var/tmp/MacHealthCheck-Inspect-Compliance.plist` and `/var/tmp/MacHealthCheck-Inspect-Config.json`, which the detached Inspect Mode `preset5` summary reads after the main script exits.
 
 **Failure Notification** — When a non-`Silent` run detects failures, `displayFailureNotification()` presents a persistent swiftDialog pseudo-alert listing the failed health checks and offering a support link.
 

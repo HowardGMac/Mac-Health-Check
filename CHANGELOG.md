@@ -2,10 +2,10 @@
 
 ## CHANGELOG
 
-### 4.0.0b3 (16-Apr-2026)
-- Added secure JSON health reporting with optional Splunk HTTP Event Collector (HEC) delivery
-- Added per-check structured result collection, centralized final health-status calculation and local JSON report persistence with validation, pretty-print debug mode, and root-only permissions
-- Added jq-optional JSON helper fallbacks plus `splunkOperationMode`, `splunkHECURL`, `splunkHECToken`, `customReportFieldsJSON`, and `reportDebug` for enterprise reporting workflows
+### 4.0.0b4 (16-Apr-2026)
+- Added JSON health reporting (with optional Splunk HTTP Event Collector (HEC) delivery)
+- Added a standalone swiftDialog Inspect Mode `preset5` summary for `Self Service` runs
+- Raised the minimum required swiftDialog version to `3.1.0.4976`
 - Refactored `checkElectronCornerMask` to reduce execution time
 
 ### 3.2.0 (02-Apr-2026)
