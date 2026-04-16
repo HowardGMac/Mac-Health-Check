@@ -1,13 +1,13 @@
 # Mac Health Check: Operation Modes
 
-This diagram compares all five `4.0.0b6.1` Mac Health Check operation modes, showing how each mode differs in terms of UI, Dock behavior, logging, and intended use case.
+This diagram compares all five `4.0.0b6.3` Mac Health Check operation modes, showing how each mode differs in terms of UI, Dock behavior, logging, and intended use case.
 
 ```mermaid
 graph TB
     ENTRY(["Mac-Health-Check.zsh<br>Parameter 4: operationMode"])
 
     subgraph SelfService["🖥️ Self Service (Default)"]
-        SS_DESC["Trigger: User via MDM Self Service<br>UI: Full swiftDialog dialog + detached fixed Preset 6 guided summary<br>Anticipation: 2s between checks<br>Dock badge: Yes (when enabled)<br>Completion timer: 60s main-dialog countdown<br>Logging: Full structured log"]
+        SS_DESC["Trigger: User via MDM Self Service<br>UI: Full swiftDialog dialog + detached fixed Preset 6 guided summary with split Unhealthy/Healthy sections<br>Anticipation: 2s between checks<br>Dock badge: Yes (when enabled)<br>Completion timer: 60s main-dialog countdown<br>Logging: Full structured log"]
         SS_USE["Use case:<br>End-user–initiated health check<br>on-demand via Self Service"]
 
         style SS_DESC fill:#e1f5ff
@@ -81,7 +81,7 @@ graph TB
 ## Mode Details
 
 ### Self Service (Default)
-The primary end-user-facing mode. Launched by a user clicking the Mac Health Check policy in MDM Self Service. Displays the full swiftDialog progress dialog with real-time status updates as each check runs. When Dock integration is enabled, the Dock badge counts down remaining checks. After report generation, normal runs launch a detached Inspect Mode fixed Preset 6 guided summary while the main dialog still completes its existing `completionTimer` countdown. If the inspect config from a recent `Self Service` run is still valid and less than 15 minutes old, rerunning the script replays the cached inspect summary immediately and skips the health-check run plus the main dialog countdown. Set `inspectSummaryPreset="on"` to keep those Preset 6 behaviors enabled, or `off` to keep the standard completion flow only.
+The primary end-user-facing mode. Launched by a user clicking the Mac Health Check policy in MDM Self Service. Displays the full swiftDialog progress dialog with real-time status updates as each check runs. When Dock integration is enabled, the Dock badge counts down remaining checks. After report generation, normal runs launch a detached Inspect Mode fixed Preset 6 guided summary with separate `Unhealthy` and `Healthy` sections while the main dialog still completes its existing `completionTimer` countdown. If the inspect config from a recent `Self Service` run is still valid and less than 15 minutes old, rerunning the script replays the cached inspect summary immediately and skips the health-check run plus the main dialog countdown. Set `inspectSummaryPreset="on"` to keep those Preset 6 behaviors enabled, or `off` to keep the standard completion flow only.
 
 **When to use:** Standard deployment for user-initiated compliance checks.
 
@@ -95,7 +95,7 @@ Runs all health checks without displaying any user interface. Intended for sched
 ---
 
 ### Debug
-Similar to Self Service, but with `set -x` tracing enabled plus swiftDialog debug launch arguments (`--verbose --resizable --debug red`). In `4.0.0b6.1`, Debug mode also enables pretty-printed local JSON reporting, while intentionally retaining the existing countdown-based ending instead of launching the detached inspect summary. This makes it easier to identify which part of the zsh script or dialog rendering is causing unexpected behavior.
+Similar to Self Service, but with `set -x` tracing enabled plus swiftDialog debug launch arguments (`--verbose --resizable --debug red`). In `4.0.0b6.3`, Debug mode also enables pretty-printed local JSON reporting, while intentionally retaining the existing countdown-based ending instead of launching the detached inspect summary. This makes it easier to identify which part of the zsh script or dialog rendering is causing unexpected behavior.
 
 **When to use:** Diagnosing why a specific check is failing or returning an unexpected status.
 

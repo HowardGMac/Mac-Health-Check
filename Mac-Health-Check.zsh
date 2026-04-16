@@ -17,9 +17,10 @@
 #
 # HISTORY
 #
-# Version 4.0.0b6.2, 16-Apr-2026, Dan K. Snelson (@dan-snelson)
+# Version 4.0.0b6.3, 16-Apr-2026, Dan K. Snelson (@dan-snelson)
 # - Added JSON health reporting (with optional Splunk HTTP Event Collector (HEC) delivery)
 # - Added a detached swiftDialog Inspect Mode (i.e., `inspectSummaryPreset="on"`) summary plus cached replay (i.e., `inspectReplayMaximumAgeSeconds`) for `Self Service` runs
+# - Split the detached swiftDialog Inspect Mode `preset6` summary results into separate `Unhealthy` and `Healthy` sections, hiding either section when it has no recorded checks
 # - Refactored `checkElectronCornerMask` to reduce execution time
 # - Raised the minimum required swiftDialog version to `3.1.0.4976`
 #
@@ -36,7 +37,7 @@
 export PATH=/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin/
 
 # Script Version
-scriptVersion="4.0.0b6.2"
+scriptVersion="4.0.0b6.3"
 
 # Client-side Log
 scriptLog="/var/log/org.churchofjesuschrist.log"
@@ -2559,6 +2560,25 @@ function getInspectResultsSummaryText() {
 
 }
 
+function getInspectUnhealthyResultsSummaryText() {
+
+    local warningCount="${#reportWarningChecks[@]}"
+    local failCount="${#reportFailChecks[@]}"
+    local errorCountLocal="${#reportErrorChecks[@]}"
+    local unhealthyCount=$(( warningCount + failCount + errorCountLocal ))
+
+    echo "${unhealthyCount} checks need attention. Warnings: ${warningCount}. Failures: ${failCount}. Errors: ${errorCountLocal}. Overall status: $( getInspectOverallStatusLabel )."
+
+}
+
+function getInspectHealthyResultsSummaryText() {
+
+    local healthyCount="${#reportHealthyChecks[@]}"
+
+    echo "${healthyCount} checks completed successfully and remain compliant."
+
+}
+
 function formatInspectResultBullet() {
 
     local index="${1}"
@@ -2584,14 +2604,47 @@ function formatInspectResultBullet() {
 
 }
 
+function buildInspectResultItemsJSONFromTitles() {
+
+    local inspectResultItems=()
+    local title=""
+    local index=""
+
+    for title in "$@"; do
+        index="${checkIndexByTitle[${title}]}"
+
+        if [[ "${index}" == <-> ]]; then
+            inspectResultItems+=( "$( formatInspectResultBullet "${index}" )" )
+        fi
+    done
+
+    buildJSONStringArray "${inspectResultItems[@]}"
+
+}
+
+function getInspectReplayExpirationMessage() {
+
+    local replayMinutes=$(( inspectReplayMaximumAgeSeconds / 60 ))
+    local expirationEpoch=$(( $( date +%s ) + inspectReplayMaximumAgeSeconds ))
+    local expirationTimestamp=""
+
+    expirationTimestamp="$( date -r "${expirationEpoch}" '+%A, %B %d at %I:%M %p %Z' 2>/dev/null )"
+
+    if [[ -n "${expirationTimestamp}" ]]; then
+        echo "These cached results may be reused for up to ${replayMinutes} minutes and will no longer be used after approximately ${expirationTimestamp}."
+    else
+        echo "These cached results may be reused for up to ${replayMinutes} minutes before they are refreshed."
+    fi
+
+}
+
 function buildInspectIntroductionGuidanceContentJSON() {
 
     local introductionText="$( getInspectIntroductionText )"
-    local replayMinutes=$(( inspectReplayMaximumAgeSeconds / 60 ))
 
     printf '%s' "["
     printf '%s' "{\"content\":$( jsonString "${introductionText}" ),\"type\":\"text\"},"
-    printf '%s' "{\"content\":$( jsonString "These results remain available for the next ${replayMinutes} minutes, after which they will be refreshed." ),\"type\":\"info\"}"
+    printf '%s' "{\"content\":$( jsonString "$( getInspectReplayExpirationMessage )" ),\"type\":\"info\"}"
     printf '%s' "]"
 
 }
@@ -2602,23 +2655,47 @@ function inspectSummaryIsEnabled() {
 
 }
 
-function buildInspectResultsGuidanceContentJSON() {
+function inspectUnhealthyResultsExist() {
 
-    local inspectResultItems=()
+    (( ${#reportWarningChecks[@]} + ${#reportFailChecks[@]} + ${#reportErrorChecks[@]} > 0 ))
 
-    for (( i=0; i<listitemLength; i++ )); do
-        if [[ "${checkExecutedByIndex[${i}]}" == "true" ]]; then
-            inspectResultItems+=( "$( formatInspectResultBullet "${i}" )" )
-        fi
-    done
+}
 
-    if [[ "${#inspectResultItems[@]}" -eq 0 ]]; then
-        inspectResultItems+=( "No executed checks were recorded for this run." )
-    fi
+function inspectHealthyResultsExist() {
+
+    (( ${#reportHealthyChecks[@]} > 0 ))
+
+}
+
+function buildInspectUnhealthyResultsGuidanceContentJSON() {
+
+    local unhealthyResultTitles=()
+
+    unhealthyResultTitles+=( "${reportErrorChecks[@]}" )
+    unhealthyResultTitles+=( "${reportFailChecks[@]}" )
+    unhealthyResultTitles+=( "${reportWarningChecks[@]}" )
+
+    printf '%s' "["
+    printf '%s' "{\"content\":$( jsonString "$( getInspectUnhealthyResultsSummaryText )" ),\"type\":\"text\"},"
+    printf '%s' "{\"items\":$( buildInspectResultItemsJSONFromTitles "${unhealthyResultTitles[@]}" ),\"type\":\"bullets\"}"
+    printf '%s' "]"
+
+}
+
+function buildInspectHealthyResultsGuidanceContentJSON() {
+
+    printf '%s' "["
+    printf '%s' "{\"content\":$( jsonString "$( getInspectHealthyResultsSummaryText )" ),\"type\":\"text\"},"
+    printf '%s' "{\"items\":$( buildInspectResultItemsJSONFromTitles "${reportHealthyChecks[@]}" ),\"type\":\"bullets\"}"
+    printf '%s' "]"
+
+}
+
+function buildInspectFallbackResultsGuidanceContentJSON() {
 
     printf '%s' "["
     printf '%s' "{\"content\":$( jsonString "$( getInspectResultsSummaryText )" ),\"type\":\"text\"},"
-    printf '%s' "{\"items\":$( buildJSONStringArray "${inspectResultItems[@]}" ),\"type\":\"bullets\"}"
+    printf '%s' "{\"items\":$( buildJSONStringArray "No executed checks were recorded for this run." ),\"type\":\"bullets\"}"
     printf '%s' "]"
 
 }
@@ -2676,11 +2753,25 @@ function buildInspectHelpGuidanceContentJSON() {
 function buildInspectItemsJSONArray() {
 
     local sectionIcon="$( getInspectSectionIcon )"
+    local separator=""
 
     printf '%s' "["
-    printf '%s' "{\"displayName\":\"Introduction\",\"guidanceContent\":$( buildInspectIntroductionGuidanceContentJSON ),\"guidanceTitle\":\"Mac Health Check Results\",\"icon\":$( jsonString "${sectionIcon}" ),\"id\":\"introduction\"},"
-    printf '%s' "{\"displayName\":\"Results\",\"guidanceContent\":$( buildInspectResultsGuidanceContentJSON ),\"guidanceTitle\":\"Results\",\"icon\":$( jsonString "${sectionIcon}" ),\"id\":\"results\"},"
-    printf '%s' "{\"displayName\":\"Help & Support\",\"guidanceContent\":$( buildInspectHelpGuidanceContentJSON ),\"guidanceTitle\":\"Help & Support\",\"icon\":$( jsonString "${sectionIcon}" ),\"id\":\"help\"}"
+    printf '%s' "{\"displayName\":\"Introduction\",\"guidanceContent\":$( buildInspectIntroductionGuidanceContentJSON ),\"guidanceTitle\":\"Mac Health Check Results\",\"icon\":$( jsonString "${sectionIcon}" ),\"id\":\"introduction\"}"
+    separator=","
+
+    if inspectUnhealthyResultsExist; then
+        printf '%s' "${separator}{\"displayName\":\"Unhealthy\",\"guidanceContent\":$( buildInspectUnhealthyResultsGuidanceContentJSON ),\"guidanceTitle\":\"Unhealthy Results\",\"icon\":$( jsonString "${sectionIcon}" ),\"id\":\"unhealthy\"}"
+    fi
+
+    if inspectHealthyResultsExist; then
+        printf '%s' "${separator}{\"displayName\":\"Healthy\",\"guidanceContent\":$( buildInspectHealthyResultsGuidanceContentJSON ),\"guidanceTitle\":\"Healthy Results\",\"icon\":$( jsonString "${sectionIcon}" ),\"id\":\"healthy\"}"
+    fi
+
+    if ! inspectUnhealthyResultsExist && ! inspectHealthyResultsExist; then
+        printf '%s' "${separator}{\"displayName\":\"Results\",\"guidanceContent\":$( buildInspectFallbackResultsGuidanceContentJSON ),\"guidanceTitle\":\"Results\",\"icon\":$( jsonString "${sectionIcon}" ),\"id\":\"results\"}"
+    fi
+
+    printf '%s' "${separator}{\"displayName\":\"Help & Support\",\"guidanceContent\":$( buildInspectHelpGuidanceContentJSON ),\"guidanceTitle\":\"Help & Support\",\"icon\":$( jsonString "${sectionIcon}" ),\"id\":\"help\"}"
     printf '%s' "]"
 
 }
