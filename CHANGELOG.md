@@ -2,9 +2,10 @@
 
 ## CHANGELOG
 
-### 4.0.0b4 (16-Apr-2026)
+### 4.0.0b6 (16-Apr-2026)
 - Added JSON health reporting (with optional Splunk HTTP Event Collector (HEC) delivery)
-- Added a detached swiftDialog Inspect Mode `preset4` dashboard summary plus cached replay (i.e., `inspectReplayMaximumAgeSeconds`) for `Self Service` runs
+- Refactored the detached `Self Service` Inspect Mode handoff to use a `preset6` guided summary built directly from finalized in-memory results
+- Corrected cached inspect-summary replay to the documented 15-minute window and validated replay against the generated Preset 6 JSON structure
 - Refactored `checkElectronCornerMask` to reduce execution time
 - Raised the minimum required swiftDialog version to `3.1.0.4976`
 

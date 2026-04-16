@@ -178,11 +178,10 @@ completionTimer="60"
 # --- New in `4.0.0` ------------------------------------------------------------------------------
 # Splunk and JSON reporting defaults
 splunkJSONReportPath="/var/tmp/MacHealthCheck-Report.json"
-inspectCompliancePlistPath="/var/tmp/MacHealthCheck-Inspect-Compliance.plist"
 inspectConfigPath="/var/tmp/MacHealthCheck-Inspect-Config.json"
 inspectLaunchLogPath="/var/tmp/MacHealthCheck-Inspect-Summary.log"
 inspectSummaryPreset="6"
-inspectReplayMaximumAgeSeconds="9000"
+inspectReplayMaximumAgeSeconds="900"
 splunkPrettyPrintJSON="false"
 splunkReportDebug="false"
 splunkAllowInsecureTLS="false"
@@ -2425,192 +2424,301 @@ function xmlEscape() {
 
 }
 
-function getInspectSummaryTitle() {
+function getInspectWindowTitle() {
+
+    echo "${humanReadableScriptName} (${scriptVersion})"
+
+}
+
+function getInspectOverallStatusLabel() {
 
     case "${reportOverallStatus}" in
         "healthy" )
-            echo "Computer Healthy"
+            echo "Healthy"
             ;;
         "warning" )
-            echo "Computer Needs Attention"
+            echo "Needs Attention"
             ;;
         "fail" )
-            echo "Computer Unhealthy"
+            echo "Unhealthy"
             ;;
         * )
-            echo "Computer Check Incomplete"
+            echo "Check Incomplete"
             ;;
     esac
 
 }
 
-function getInspectSummaryMessage() {
+function getDisplayStatusLabelFromNormalizedStatus() {
+
+    local normalizedStatus="${1}"
+
+    case "${normalizedStatus}" in
+        "healthy" )
+            echo "Healthy"
+            ;;
+        "warning" )
+            echo "Warning"
+            ;;
+        "fail" )
+            echo "Failed"
+            ;;
+        * )
+            echo "Error"
+            ;;
+    esac
+
+}
+
+function getInspectSectionIcon() {
+
+    if [[ -n "${dockIcon}" && "${dockIcon}" != "default" ]]; then
+        echo "${dockIcon}"
+    elif [[ -n "${organizationOverlayiconURL}" ]]; then
+        echo "${organizationOverlayiconURL}"
+    else
+        echo "/System/Library/CoreServices/Apple Diagnostics.app"
+    fi
+
+}
+
+function getInspectSupportButtonIcon() {
+
+    case "${supportButtonAction}" in
+        mailto:* )
+            echo "envelope.fill"
+            ;;
+        slack://*|msteams://*|teams://*|zoommtg://* )
+            echo "message.fill"
+            ;;
+        * )
+            echo "safari.fill"
+            ;;
+    esac
+
+}
+
+function normalizeInspectSupportValue() {
+
+    local supportValue="${1}"
+    local linkText=""
+    local linkURL=""
+
+    if [[ "${supportValue}" == \[*\]\(*\) ]]; then
+        linkText="${supportValue#\[}"
+        linkText="${linkText%%\]*}"
+        linkURL="${supportValue#*\(}"
+        linkURL="${linkURL%\)}"
+        supportValue="${linkText}: ${linkURL}"
+    fi
+
+    printf '%s' "${supportValue}"
+
+}
+
+function getInspectIntroductionText() {
 
     case "${reportOverallStatus}" in
         "healthy" )
-            echo "Summary of the completed Mac Health Check run. All executed checks are compliant, and only healthy results count as compliant."
+            echo "Your recent Mac Health Check results are ready to review. All executed checks completed with healthy results."
             ;;
         "warning" )
-            echo "Summary of the completed Mac Health Check run. Some executed checks need attention, and only healthy results count as compliant."
+            echo "Your recent Mac Health Check results are ready to review. Some executed checks need attention."
             ;;
         "fail" )
-            echo "Summary of the completed Mac Health Check run. One or more executed checks failed, and only healthy results count as compliant."
+            echo "Your recent Mac Health Check results are ready to review. One or more executed checks failed."
             ;;
         * )
-            echo "Summary of the completed Mac Health Check run. One or more executed checks could not be evaluated cleanly, and only healthy results count as compliant."
+            echo "Your recent Mac Health Check results are ready to review. One or more executed checks could not be evaluated cleanly."
             ;;
     esac
 
 }
 
-function getInspectSummaryIcon() {
+function getInspectResultsSummaryText() {
 
-    case "${reportOverallStatus}" in
-        "healthy" )
-            echo "sf=checkmark.circle.fill,colour=#16a34a,weight=bold"
-            ;;
-        "warning" )
-            echo "sf=exclamationmark.triangle.fill,colour=#f59e0b,weight=bold"
-            ;;
-        "fail" )
-            echo "sf=xmark.octagon.fill,colour=#dc2626,weight=bold"
-            ;;
-        * )
-            echo "sf=questionmark.circle.fill,colour=#dc2626,weight=bold"
-            ;;
-    esac
+    local healthyCount="${#reportHealthyChecks[@]}"
+    local warningCount="${#reportWarningChecks[@]}"
+    local failCount="${#reportFailChecks[@]}"
+    local errorCountLocal="${#reportErrorChecks[@]}"
+    local executedCount=$(( healthyCount + warningCount + failCount + errorCountLocal ))
+
+    echo "${executedCount} checks executed. Healthy: ${healthyCount}. Warnings: ${warningCount}. Failures: ${failCount}. Errors: ${errorCountLocal}. Only healthy results count as compliant. Overall status: $( getInspectOverallStatusLabel )."
 
 }
 
-function getInspectCategoryForCheck() {
+function formatInspectResultBullet() {
 
-    local checkTitle="${1}"
+    local index="${1}"
+    local checkTitle="${checkTitleByIndex[${index}]}"
+    local normalizedStatus="${checkNormalizedStatusByIndex[${index}]}"
+    local rawValue="${checkStatustextByIndex[${index}]}"
+    local message="${checkMessageByIndex[${index}]}"
+    local remediation="${checkRemediationByIndex[${index}]}"
+    local statusLabel="$( getDisplayStatusLabelFromNormalizedStatus "${normalizedStatus}" )"
+    local bullet="${checkTitle} [${statusLabel}]"
 
-    case "${checkTitle}" in
-        "macOS Version" | "System Integrity Protection" | "Signed System Volume" | "Firewall" | "FileVault Encryption" | "Gatekeeper / XProtect" | "Touch ID" | "Password Hint" | "AirDrop" | "AirPlay Receiver" | "Bluetooth Sharing" )
-            echo "Security"
-            ;;
-        "Available Updates" | "Last Reboot" | "Free Disk Space" | "Desktop Size and Item Count" | "Downloads Size and Item Count" | "Trash Size and Item Count" )
-            echo "Maintenance"
-            ;;
-        *" MDM Profile" | *" MDM Certificate Expiration" | "Apple Push Notification service" | "Jamf Pro Check-In" | "Jamf Pro Inventory" | "Mosyle Check-In" | "Computer Inventory" )
-            echo "Management"
-            ;;
-        "VPN Client" | "Apple Push Notification Hosts" | "Apple Device Management" | "Apple Software and Carrier Updates" | "Apple Certificate Validation" | "Apple Identity and Content Services" | "Jamf Hosts" | "Network Quality Test" )
-            echo "Connectivity"
-            ;;
-        "App Auto-Patch" | "Homebrew Status" | "Electron Corner Mask" | "Microsoft Teams" | "Microsoft Company Portal" | "Fleet Desktop" | *"Self-Service" | "BeyondTrust Privilege Management" | "Cisco Umbrella" | "CrowdStrike Falcon" | "Palo Alto GlobalProtect" )
-            echo "Applications"
-            ;;
-        * )
-            echo "Applications"
-            ;;
-    esac
+    if [[ -n "${rawValue}" && "${rawValue}" != "Pending ..." && "${rawValue}" != "Pending …" ]]; then
+        bullet+=" - ${rawValue}"
+    elif [[ -n "${message}" ]]; then
+        bullet+=" - ${message}"
+    fi
+
+    if [[ "${normalizedStatus}" != "healthy" && -n "${remediation}" ]]; then
+        bullet+=". Action: ${remediation}"
+    fi
+
+    printf '%s' "${bullet}"
 
 }
 
-function buildInspectCompatibilityPlist() {
+function buildInspectIntroductionGuidanceContentJSON() {
 
-    local inspectTimestamp="${reportTimestamp:-$( date '+%Y-%m-%dT%H:%M:%S%z' | sed -E 's/(..)$/:\1/' )}"
-    local plistXML=$'<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n'
-    local checkKey=""
-    local checkStatus=""
+    local introductionText="$( getInspectIntroductionText )"
+    local replayMinutes=$(( inspectReplayMaximumAgeSeconds / 60 ))
 
-    plistXML+=$'\t<key>overallStatus</key>\n\t<string>'"$( xmlEscape "${reportOverallStatus}" )"$'</string>\n'
-    plistXML+=$'\t<key>scriptVersion</key>\n\t<string>'"$( xmlEscape "${scriptVersion}" )"$'</string>\n'
-    plistXML+=$'\t<key>timestamp</key>\n\t<string>'"$( xmlEscape "${inspectTimestamp}" )"$'</string>\n'
+    printf '%s' "["
+    printf '%s' "{\"content\":$( jsonString "${introductionText}" ),\"type\":\"text\"},"
+    printf '%s' "{\"content\":$( jsonString "These results remain available for the next ${replayMinutes} minutes, after which they will be refreshed." ),\"type\":\"info\"}"
+    printf '%s' "]"
+
+}
+
+function buildInspectResultsGuidanceContentJSON() {
+
+    local inspectResultItems=()
 
     for (( i=0; i<listitemLength; i++ )); do
         if [[ "${checkExecutedByIndex[${i}]}" == "true" ]]; then
-            checkKey="${checkKeyByIndex[${i}]}"
-            [[ -z "${checkKey}" ]] && checkKey="$( sanitizeCheckKey "${checkTitleByIndex[${i}]}" )"
-            checkStatus="${checkNormalizedStatusByIndex[${i}]}"
-            plistXML+=$'\t<key>check_status_'"$( xmlEscape "${checkKey}" )"$'</key>\n\t<string>'"$( xmlEscape "${checkStatus}" )"$'</string>\n'
+            inspectResultItems+=( "$( formatInspectResultBullet "${i}" )" )
         fi
     done
 
-    plistXML+=$'</dict>\n</plist>'
-    printf '%s' "${plistXML}"
+    if [[ "${#inspectResultItems[@]}" -eq 0 ]]; then
+        inspectResultItems+=( "No executed checks were recorded for this run." )
+    fi
+
+    printf '%s' "["
+    printf '%s' "{\"content\":$( jsonString "$( getInspectResultsSummaryText )" ),\"type\":\"text\"},"
+    printf '%s' "{\"items\":$( buildJSONStringArray "${inspectResultItems[@]}" ),\"type\":\"bullets\"}"
+    printf '%s' "]"
+
+}
+
+function buildInspectSupportText() {
+
+    local supportText="For assistance, please contact ${supportTeamName}."
+    local supportFieldsFound="false"
+    local supportLabelVar=""
+    local supportValueVar=""
+    local supportLabel=""
+    local supportValue=""
+
+    for supportIndex in {1..6}; do
+        supportLabelVar="supportLabel${supportIndex}"
+        supportValueVar="supportValue${supportIndex}"
+        supportLabel="${(P)supportLabelVar}"
+        supportValue="${(P)supportValueVar}"
+
+        if [[ -n "${supportLabel}" && -n "${supportValue}" ]]; then
+            supportFieldsFound="true"
+            supportText+=$'\n'
+            supportText+="${supportLabel}: $( normalizeInspectSupportValue "${supportValue}" )"
+        fi
+    done
+
+    if [[ "${supportFieldsFound}" == "false" ]]; then
+        [[ -n "${supportTeamPhone}" ]] && supportText+=$'\n'"Telephone: ${supportTeamPhone}"
+        [[ -n "${supportTeamEmail}" ]] && supportText+=$'\n'"Email: ${supportTeamEmail}"
+        [[ -n "${supportTeamWebsite}" ]] && supportText+=$'\n'"Website: ${supportTeamWebsite}"
+        [[ -n "${supportKB}" && -n "${infobuttonaction}" ]] && supportText+=$'\n'"Knowledge Base Article: ${supportKB} (${infobuttonaction})"
+    fi
+
+    printf '%s' "${supportText}"
+
+}
+
+function buildInspectHelpGuidanceContentJSON() {
+
+    local helpText="$( buildInspectSupportText )"
+    local buttonText="${supportButtonText:-${supportButtonAction}}"
+
+    printf '%s' "["
+    printf '%s' "{\"content\":$( jsonString "${helpText}" ),\"type\":\"text\"}"
+
+    if [[ -n "${supportButtonAction}" ]]; then
+        printf '%s' ","
+        printf '%s' "{\"action\":\"url\",\"content\":$( jsonString "${buttonText}" ),\"icon\":$( jsonString "$( getInspectSupportButtonIcon )" ),\"type\":\"button\",\"url\":$( jsonString "${supportButtonAction}" )}"
+    fi
+
+    printf '%s' "]"
 
 }
 
 function buildInspectItemsJSONArray() {
 
-    local itemsJSON="["
-    local separator=""
-    local checkTitle=""
-    local checkKey=""
-    local category=""
+    local sectionIcon="$( getInspectSectionIcon )"
 
-    for (( i=0; i<listitemLength; i++ )); do
-        if [[ "${checkExecutedByIndex[${i}]}" == "true" ]]; then
-            checkTitle="${checkTitleByIndex[${i}]}"
-            checkKey="${checkKeyByIndex[${i}]}"
-            [[ -z "${checkKey}" ]] && checkKey="$( sanitizeCheckKey "${checkTitle}" )"
-            category="$( getInspectCategoryForCheck "${checkTitle}" )"
-
-            itemsJSON+="${separator}{"
-            itemsJSON+="\"id\":$( jsonString "${checkKey}" ),"
-            itemsJSON+="\"displayName\":$( jsonString "${checkTitle}" ),"
-            itemsJSON+="\"guiIndex\":${i},"
-            itemsJSON+="\"paths\":[$( jsonString "${inspectCompliancePlistPath}" )],"
-            itemsJSON+="\"plistKey\":$( jsonString "check_status_${checkKey}" ),"
-            itemsJSON+="\"expectedValue\":\"healthy\","
-            itemsJSON+="\"evaluation\":\"equals\","
-            itemsJSON+="\"category\":$( jsonString "${category}" )"
-            itemsJSON+="}"
-            separator=","
-        fi
-    done
-
-    itemsJSON+="]"
-    printf '%s' "${itemsJSON}"
+    printf '%s' "["
+    printf '%s' "{\"displayName\":\"Introduction\",\"guidanceContent\":$( buildInspectIntroductionGuidanceContentJSON ),\"guidanceTitle\":\"Mac Health Check Results\",\"icon\":$( jsonString "${sectionIcon}" ),\"id\":\"introduction\"},"
+    printf '%s' "{\"displayName\":\"Results\",\"guidanceContent\":$( buildInspectResultsGuidanceContentJSON ),\"guidanceTitle\":\"Results\",\"icon\":$( jsonString "${sectionIcon}" ),\"id\":\"results\"},"
+    printf '%s' "{\"displayName\":\"Help & Support\",\"guidanceContent\":$( buildInspectHelpGuidanceContentJSON ),\"guidanceTitle\":\"Help & Support\",\"icon\":$( jsonString "${sectionIcon}" ),\"id\":\"help\"}"
+    printf '%s' "]"
 
 }
 
 function buildInspectConfigJSON() {
 
-    local inspectTitle="$( getInspectSummaryTitle )"
-    local inspectMessage="$( getInspectSummaryMessage )"
-    local itemsJSON="$( buildInspectItemsJSONArray )"
-    local inspectIcon="$( getInspectSummaryIcon )"
-    local inspectHighlightColor="#51a3ef"
+    local inspectHighlightColor="#007AFF"
 
     printf '%s' "{"
     printf '%s' "\"preset\":$( jsonString "${inspectSummaryPreset}" ),"
-    printf '%s' "\"title\":$( jsonString "${inspectTitle}" ),"
-    printf '%s' "\"message\":$( jsonString "${inspectMessage}" ),"
-    printf '%s' "\"icon\":$( jsonString "${inspectIcon}" ),"
-    printf '%s' "\"size\":\"large\","
-    printf '%s' "\"style\":\"cards\","
+    printf '%s' "\"title\":$( jsonString "$( getInspectWindowTitle )" ),"
     printf '%s' "\"highlightColor\":$( jsonString "${inspectHighlightColor}" ),"
-    printf '%s' "\"button1text\":\"Close\","
-    printf '%s' "\"button1disabled\":true,"
-    printf '%s' "\"autoEnableButton\":true,"
-    printf '%s' "\"autoEnableButtonText\":\"Close\","
-    printf '%s' "\"button2visible\":false,"
-    printf '%s' "\"items\":${itemsJSON}"
+    printf '%s' "\"items\":$( buildInspectItemsJSONArray )"
     printf '%s' "}"
 
 }
 
-function validateInspectCompatibilityPlist() {
-    /usr/bin/plutil -lint "${inspectCompliancePlistPath}" >/dev/null 2>&1
-}
-
 function validateInspectConfigFile() {
+
+    local inspectConfigToValidate="${1:-${inspectConfigPath}}"
 
     jq -e \
         --arg inspectSummaryPreset "${inspectSummaryPreset}" \
         '.preset == $inspectSummaryPreset
-        and .button1text == "Close"
-        and .button1disabled == true
-        and .autoEnableButton == true
-        and .autoEnableButtonText == "Close"
-        and .button2visible == false
+        and (.title | type == "string")
+        and (.title | length > 0)
+        and (.highlightColor | type == "string")
+        and (.highlightColor | length > 0)
         and (.items | type == "array")
-        and (.items | length > 0)' \
-        "${inspectConfigPath}" >/dev/null 2>&1
+        and (.items | length >= 3)
+        and all(.items[];
+            (.displayName | type == "string")
+            and (.displayName | length > 0)
+            and (.guidanceTitle | type == "string")
+            and (.guidanceTitle | length > 0)
+            and (.icon | type == "string")
+            and (.icon | length > 0)
+            and (.id | type == "string")
+            and (.id | length > 0)
+            and (.guidanceContent | type == "array")
+            and (.guidanceContent | length > 0)
+            and all(.guidanceContent[];
+                (.type | type == "string")
+                and (.type | length > 0)
+                and (if .type == "bullets" then
+                        (.items | type == "array") and (.items | length > 0)
+                    elif .type == "button" then
+                        (.action == "url")
+                        and (.content | type == "string") and (.content | length > 0)
+                        and (.url | type == "string") and (.url | length > 0)
+                    else
+                        (.content | type == "string") and (.content | length > 0)
+                    end)
+            )
+        )' \
+        "${inspectConfigToValidate}" >/dev/null 2>&1
 
 }
 
@@ -2660,10 +2768,8 @@ function prepareInspectLaunchLogForUser() {
 
 function generateInspectSummaryAssets() {
 
-    local inspectPlistPayload=""
     local inspectConfigJSON=""
 
-    inspectPlistPayload="$( buildInspectCompatibilityPlist )"
     inspectConfigJSON="$( buildInspectConfigJSON )"
 
     if ! validateJson "${inspectConfigJSON}"; then
@@ -2671,14 +2777,8 @@ function generateInspectSummaryAssets() {
         return 1
     fi
 
-    writeReadableTextFile "${inspectCompliancePlistPath}" "${inspectPlistPayload}"
-    if ! validateInspectCompatibilityPlist; then
-        warning "Inspect Summary: failed to validate ${inspectCompliancePlistPath}."
-        return 1
-    fi
-
     writeReadableTextFile "${inspectConfigPath}" "${inspectConfigJSON}"
-    if ! validateInspectConfigFile; then
+    if ! validateInspectConfigFile "${inspectConfigPath}"; then
         warning "Inspect Summary: failed to validate ${inspectConfigPath}."
         return 1
     fi
@@ -2687,7 +2787,7 @@ function generateInspectSummaryAssets() {
         return 1
     fi
 
-    notice "Inspect Summary: wrote ${inspectCompliancePlistPath} and ${inspectConfigPath}."
+    notice "Inspect Summary: wrote ${inspectConfigPath}."
     return 0
 
 }
@@ -2738,11 +2838,6 @@ function replayCachedInspectSummaryIfEligible() {
         return 1
     fi
 
-    if [[ ! -r "${inspectCompliancePlistPath}" ]]; then
-        warning "Inspect Summary Replay: compatibility plist missing; running full health check."
-        return 1
-    fi
-
     configFileEpoch="$( stat -f "%m" "${inspectConfigPath}" 2>/dev/null )"
     if [[ ! "${configFileEpoch}" == <-> ]]; then
         warning "Inspect Summary Replay: unable to determine config age; running full health check."
@@ -2761,13 +2856,8 @@ function replayCachedInspectSummaryIfEligible() {
         return 1
     fi
 
-    if ! validateInspectConfigFile; then
+    if ! validateInspectConfigFile "${inspectConfigPath}"; then
         warning "Inspect Summary Replay: cached config structure is invalid for Preset ${inspectSummaryPreset}; running full health check."
-        return 1
-    fi
-
-    if ! validateInspectCompatibilityPlist; then
-        warning "Inspect Summary Replay: cached compatibility plist is invalid for Preset ${inspectSummaryPreset}; running full health check."
         return 1
     fi
 
