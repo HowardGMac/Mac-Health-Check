@@ -1,6 +1,6 @@
 # Mac Health Check: Operation Modes
 
-This diagram compares all five `4.0.0b2` Mac Health Check operation modes, showing how each mode differs in terms of UI, Dock behavior, logging, and intended use case.
+This diagram compares all five `4.0.0b3` Mac Health Check operation modes, showing how each mode differs in terms of UI, Dock behavior, logging, and intended use case.
 
 ```mermaid
 graph TB
@@ -93,7 +93,7 @@ Runs all health checks without displaying any user interface. Intended for sched
 ---
 
 ### Debug
-Similar to Self Service, but with `set -x` tracing enabled plus swiftDialog debug launch arguments (`--verbose --resizable --debug red`). In `4.0.0b2`, Debug mode also enables pretty-printed local JSON reporting. This makes it easier to identify which part of the zsh script or dialog rendering is causing unexpected behavior.
+Similar to Self Service, but with `set -x` tracing enabled plus swiftDialog debug launch arguments (`--verbose --resizable --debug red`). In `4.0.0b3`, Debug mode also enables pretty-printed local JSON reporting. This makes it easier to identify which part of the zsh script or dialog rendering is causing unexpected behavior.
 
 **When to use:** Diagnosing why a specific check is failing or returning an unexpected status.
 

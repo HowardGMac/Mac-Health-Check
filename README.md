@@ -1,6 +1,6 @@
 ![GitHub release (latest by date)](https://img.shields.io/github/v/release/dan-snelson/Mac-Health-Check?display_name=tag) ![GitHub pre-release (latest by date)](https://img.shields.io/github/v/release/dan-snelson/Mac-Health-Check?display_name=tag&include_prereleases) ![GitHub issues](https://img.shields.io/github/issues-raw/dan-snelson/Mac-Health-Check) ![GitHub closed issues](https://img.shields.io/github/issues-closed-raw/dan-snelson/Mac-Health-Check) ![GitHub pull requests](https://img.shields.io/github/issues-pr-raw/dan-snelson/Mac-Health-Check) ![GitHub closed pull requests](https://img.shields.io/github/issues-pr-closed-raw/dan-snelson/Mac-Health-Check)
 
-# Mac Health Check (4.0.0b2)
+# Mac Health Check (4.0.0b3)
 
 > Another pleasant update to the practical, MDM-agnostic, user-friendly approach to surfacing Mac compliance information directly to end-users via your MDM's self-service app
 
@@ -53,9 +53,9 @@ Mac Health Check is particularly valuable in IT support workflows, serving as an
 - If dock icon setup fails, Mac Health Check logs a warning and falls back to the default `/usr/local/bin/dialog` launch path
 
 ## Features
-The following health checks and information reporting are included in version `4.0.0b2`, which operates in `Self Service` mode by default. (Change `operationMode` to `Debug`, `Development` or `Test` when getting ready to deploy in production.)
+The following health checks and information reporting are included in version `4.0.0b3`, which operates in `Self Service` mode by default. (Change `operationMode` to `Debug`, `Development` or `Test` when getting ready to deploy in production.)
 
-> :new: Mac Health Check version `4.0.0b2` adds secure JSON report generation plus optional Splunk HEC delivery, while retaining the `3.2.0` persistent failed-health notification behavior.
+> :new: Mac Health Check version `4.0.0b3` adds secure JSON report generation plus optional Splunk HEC delivery, while retaining the `3.2.0` persistent failed-health notification behavior.
  
 <img src="images/MHC_3.2.0_failure_notification.png" alt="Health Checks" width="400"/>
 
@@ -63,10 +63,10 @@ The following health checks and information reporting are included in version `4
 
 <img src="images/MHC_3.2.0.png" alt="Health Checks" width="800"/>
 
-:tada: Improved in version `3.2.0`
+:tada: Improved in version `4.0.0`
 
 1. macOS Version
-1. :tada: Available Updates (including deferred and DDM-enforced updates)
+1. Available Updates (including deferred and DDM-enforced updates)
 1. System Integrity Protection
 1. Signed System Volume (SSV)
 1. Firewall
@@ -79,7 +79,7 @@ The following health checks and information reporting are included in version `4
 1. Bluetooth Sharing
 1. VPN Client
 1. Last Reboot
-1. :tada: Free Disk Space
+1. Free Disk Space
 1. User's Directory Size and Item Count
     - Desktop
     - Downloads
@@ -95,17 +95,17 @@ The following health checks and information reporting are included in version `4
     - Apple Software and Carrier Updates
     - Apple Certificate Validation
     - Apple Identity and Content Services
-    - :tada: Jamf Hosts
+    - Jamf Hosts
 1. App Auto-Patch
-1. :new: Homebrew Status
-1. Electron Corner Mask [🔗](https://avarayr.github.io/shamelectron/)
+1. Homebrew Status
+1. :tada: Electron Corner Mask [🔗](https://avarayr.github.io/shamelectron/)
 1. Organizationally required Applications (i.e., Microsoft Teams)
 1. BeyondTrust Privilege Management*
 1. Cisco Umbrella*
 1. CrowdStrike Falcon*
 1. Palo Alto GlobalProtect*
 1. Network Quality Test
-1. :tada: Update Computer Inventory**
+1. Update Computer Inventory**
 
 *Requires [external check](/external-checks/README.md)
 **Requires Jamf Pro
@@ -114,7 +114,7 @@ The following health checks and information reporting are included in version `4
 
 <img src="images/MHC_3.2.0_Helpmessage.png" alt="In progress" width="800"/>
 
-#### JSON / Splunk Reporting
+#### :new: JSON / Splunk Reporting
 - Generates a structured JSON health report at the end of every run
 - Saves the report locally to `/var/tmp/MacHealthCheck-Report.json` by default with `600` permissions
 - Supports optional Splunk HEC delivery through Parameters 6-10 without changing the existing `operationMode` contract
@@ -162,7 +162,7 @@ The following health checks and information reporting are included in version `4
 ### Policy Log Reporting
 
 ```
-MHC (4.0.0b2): 2026-03-28 03:43:13 - [NOTICE] WARNING: 'localadmin' IS A MEMBER OF 'admin';
+MHC (4.0.0b3): 2026-03-28 03:43:13 - [NOTICE] WARNING: 'localadmin' IS A MEMBER OF 'admin';
 User: macOS Server Administrator (localadmin) [503] staff everyone localaccounts _appserverusr 
 admin _appserveradm com.apple.sharepoint.group.4 com.apple.sharepoint.group.3
 com.apple.sharepoint.group.1 _appstore _lpadmin _lpoperator _developer _analyticsusers
@@ -210,7 +210,7 @@ Deployment of Mac Health Check involves configuring organizational defaults, upl
 
 A new "Development" Operation Mode has been added to aid in developing Health Checks, allowing the easy execution of a _single_ Health Check.
 
-When `operationMode` is set to `Development`, the current `4.0.0b2` implementation uses a dedicated `developmentListitemJSON` for a single `Microsoft Teams` check instead of running the entire suite.
+When `operationMode` is set to `Development`, the current `4.0.0b3` implementation uses a dedicated `developmentListitemJSON` for a single `Microsoft Teams` check instead of running the entire suite.
 
 ```zsh
 ####################################################################################################

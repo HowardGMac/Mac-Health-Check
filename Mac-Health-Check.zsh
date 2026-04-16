@@ -17,12 +17,13 @@
 #
 # HISTORY
 #
-# Version 4.0.0b2, 15-Apr-2026, Dan K. Snelson (@dan-snelson)
+# Version 4.0.0b3, 16-Apr-2026, Dan K. Snelson (@dan-snelson)
 #   - Added secure JSON health reporting with optional Splunk HTTP Event Collector (HEC) delivery
 #   - Added per-check structured result collection, centralized final health-status calculation,
 #     and local JSON report persistence with validation, pretty-print debug mode, and root-only permissions
 #   - Added jq-optional JSON helper fallbacks plus `splunkOperationMode`, `splunkHECURL`,
 #     `splunkHECToken`, `customReportFieldsJSON`, and `reportDebug` for enterprise reporting workflows
+#   - Refactored `checkElectronCornerMask` to reduce execution time
 #
 ####################################################################################################
 
@@ -37,7 +38,7 @@
 export PATH=/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin/
 
 # Script Version
-scriptVersion="4.0.0b2"
+scriptVersion="4.0.0b3"
 
 # Client-side Log
 scriptLog="/var/log/org.churchofjesuschrist.log"
@@ -61,7 +62,7 @@ SECONDS="0"
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 # Parameter 4: Operation Mode [ Debug | Development | Self Service | Silent | Test ]
-operationMode="${4:-"Self Service"}"
+operationMode="${4:-"Development"}"
 
     # Enable `set -x` if operation mode is "Debug" to help identify issues
     [[ "${operationMode}" == "Debug" ]] && set -x
@@ -69,7 +70,7 @@ operationMode="${4:-"Self Service"}"
 # Parameter 5: Microsoft Teams or Slack Webhook URL [ Leave blank to disable (default) | https://microsoftTeams.webhook.com/URL | https://hooks.slack.com/services/URL ]
 webhookURL="${5:-""}"
 
-# === NEW IN 4.0.0b2 ===
+# === NEW IN 4.0.0b3 ===
 # Parameter 6: Splunk reporting mode [ off | test | production ]
 splunkOperationMode="${6:-"test"}"
 
@@ -83,7 +84,7 @@ splunkHECToken="${8:-""}"
 customReportFieldsJSON="${9:-""}"
 
 # Parameter 10: Reporting debug mode [ true | false ]
-reportDebug="${10:-"true"}"
+reportDebug="${10:-"false"}"
 
 
 
@@ -176,7 +177,7 @@ excessiveUptimeAlertStyle="warning"
 # Completion Timer (in seconds)
 completionTimer="60"
 
-# === NEW IN 4.0.0b2 ===
+# === NEW IN 4.0.0b3 ===
 # Splunk and JSON reporting defaults
 splunkJSONReportPath="/var/tmp/MacHealthCheck-Report.json"
 splunkPrettyPrintJSON="false"
@@ -1718,7 +1719,7 @@ function get_json_value() {
 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-# === NEW IN 4.0.0b2 ===
+# === NEW IN 4.0.0b3 ===
 # Result-collection Helpers
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
@@ -1973,7 +1974,7 @@ function getCheckStatusByTitle() {
 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-# === NEW IN 4.0.0b2 ===
+# === NEW IN 4.0.0b3 ===
 # Splunk Reporting Helpers
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
@@ -5017,13 +5018,13 @@ function checkElectronCornerMask() {
     notice "Check ${humanReadableCheckName} …"
 
     dialogUpdate "icon: SF=cpu.fill,${organizationColorScheme}"
-    dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill $(echo "${organizationColorScheme}" | tr ',' ' '), iconalpha: 1, status: wait, statustext: Scanning for Electron apps …"
+    dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill ${organizationColorScheme//,/ }, iconalpha: 1, status: wait, statustext: Scanning for Electron apps …"
     dialogUpdate "progress: increment"
     dialogUpdate "progresstext: Checking installed Electron apps …"
 
     sleep "${anticipationDuration}"
 
-    osMajorVersion=$( echo "${osVersion}" | awk -F '.' '{print $1}' )
+    local osMajorVersion="${osVersion%%.*}"
     if [[ "${osMajorVersion}" -lt 26 ]]; then
         info "${humanReadableCheckName}: macOS ${osVersion} — not affected."
         dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=#63CA56, iconalpha: 0.6, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: Not affected (macOS ${osVersion})"
@@ -5042,110 +5043,151 @@ function checkElectronCornerMask() {
     local foundElectronApps=0
     local vulnerableApps=()
     local safeApps=()
+    local -A processedElectronApps=()
 
     setopt null_glob
 
-    local appPaths=(
-        /Applications/*.app
-        /Applications/Utilities/*.app
-        /Users/"${loggedInUser}"/Applications/*.app
+    local appSearchRoots=(
+        /Applications
+        /Applications/Utilities
+        /Users/"${loggedInUser}"/Applications
     )
+    local frameworkPaths=(
+        /Applications/*.app/Contents/Frameworks/Electron\ Framework.framework
+        /Applications/Utilities/*.app/Contents/Frameworks/Electron\ Framework.framework
+        /Users/"${loggedInUser}"/Applications/*.app/Contents/Frameworks/Electron\ Framework.framework
+    )
+    local knownSafeElectronAppNames=(
+        "Visual Studio Code.app"
+        "Slack.app"
+    )
+    local app=""
+    local appName=""
+    local appSearchRoot=""
+    local appVersion=""
+    local frameworkPath=""
+    local versionFile=""
+    local frameworkPlist=""
+    local frameworkResourcesPath=""
+    local frameworkFallbackResourcesPath=""
+    local pkgJson=""
+    local asarPkgJson=""
+    local productJson=""
+    local versionTxt=""
+    local appInfoPlist=""
+    local fixed=""
+    local vulnerable=""
 
-    for app in "${appPaths[@]}"; do
+    for appName in "${knownSafeElectronAppNames[@]}"; do
+        appVersion="${knownSafeElectronApps[$appName]}"
+        for appSearchRoot in "${appSearchRoots[@]}"; do
+            app="${appSearchRoot}/${appName}"
+            if [[ -d "${app}" ]]; then
+                ((foundElectronApps++))
+                processedElectronApps["${app}"]=1
+                safeApps+=("${appName} (${appVersion}) [known fixed]")
+            fi
+        done
+    done
+
+    for frameworkPath in "${frameworkPaths[@]}"; do
+        app="${frameworkPath:h:h:h}"
         [[ ! -d "${app}" ]] && continue
-        local appName=$(basename "${app}")
+        if [[ -n "${processedElectronApps[$app]}" ]]; then
+            continue
+        fi
+        processedElectronApps["${app}"]=1
 
-        # If app is pre-known to be fixed, skip file scans
-        if [[ -n "${knownSafeElectronApps[$appName]}" ]]; then
-            local appVersion="${knownSafeElectronApps[$appName]}"
-            ((foundElectronApps++))
-            safeApps+=("${appName} (${appVersion}) [known fixed]")
+        ((foundElectronApps++))
+        appName="${app:t}"
+        appVersion="Unknown"
+
+        frameworkResourcesPath="${frameworkPath}/Versions/Current/Resources"
+        frameworkFallbackResourcesPath="${frameworkPath}/Versions/A/Resources"
+        versionFile="${frameworkResourcesPath}/version"
+        frameworkPlist="${frameworkResourcesPath}/Info.plist"
+        if [[ ! -f "${versionFile}" ]]; then
+            versionFile="${frameworkFallbackResourcesPath}/version"
+        fi
+        if [[ ! -f "${frameworkPlist}" ]]; then
+            frameworkPlist="${frameworkFallbackResourcesPath}/Info.plist"
+        fi
+        pkgJson="${app}/Contents/Resources/app/package.json"
+        asarPkgJson="${app}/Contents/Resources/app.asar.unpacked/package.json"
+        productJson="${app}/Contents/Resources/app/product.json"
+        versionTxt="${app}/Contents/Resources/app/version.txt"
+        appInfoPlist="${app}/Contents/Info.plist"
+
+        # 1. Canonical Electron version file
+        if [[ -f "${versionFile}" ]]; then
+            appVersion="${$(<"${versionFile}")//$'\n'/}"
+            appVersion="${appVersion//$'\r'/}"
+            appVersion="${appVersion//$'\t'/}"
+
+        # 1a. Framework Info.plist (reliable for runtime version) – prioritize CFBundleVersion (common in Electron frameworks)
+        elif [[ -f "${frameworkPlist}" ]]; then
+            appVersion=$(/usr/bin/plutil -extract CFBundleVersion raw -expect string "${frameworkPlist}" 2>/dev/null)
+            if [[ -z "${appVersion}" ]]; then
+                appVersion=$(/usr/bin/plutil -extract CFBundleShortVersionString raw -expect string "${frameworkPlist}" 2>/dev/null)
+            fi
+
+        # 2. package.json electronVersion
+        elif [[ -f "${pkgJson}" ]]; then
+            appVersion=$(grep -Eo '"electronVersion"[^,]*' "${pkgJson}" | awk -F'"' '{print $4}')
+
+        # 3. asar-unpacked package.json
+        elif [[ -f "${asarPkgJson}" ]]; then
+            appVersion=$(grep -Eo '"electronVersion"[^,]*' "${asarPkgJson}" | awk -F'"' '{print $4}')
+
+        # 4. product.json (VS Code, Figma, Discord, etc.)
+        elif [[ -f "${productJson}" ]]; then
+            appVersion=$(grep -Eo '"version"[^,]*' "${productJson}" | awk -F'"' '{print $4}')
+            if [[ ! "${appVersion}" =~ ^[0-9]+\.[0-9]+ ]]; then
+                local commit=$(grep -Eo '"commit"[^,]*' "${productJson}" | awk -F'"' '{print $4}')
+                [[ -n "${commit}" ]] && appVersion="custom-${commit:0:7}"
+            fi
+
+        # 5. version.txt fallback (Asana, Notion)
+        elif [[ -f "${versionTxt}" ]]; then
+            appVersion="${$(<"${versionTxt}")//$'\n'/}"
+            appVersion="${appVersion//$'\r'/}"
+            appVersion="${appVersion//$'\t'/}"
+        fi
+
+        appVersion="${appVersion#"${appVersion%%[![:space:]]*}"}"
+        appVersion="${appVersion%"${appVersion##*[![:space:]]}"}"
+
+        # 6. If still unknown, fall back to CFBundleShortVersionString (app version, mark Electron as unknown)
+        if [[ -z "${appVersion}" || "${appVersion}" == "Unknown" ]]; then
+            if [[ -f "${appInfoPlist}" ]]; then
+                appVersion=$(/usr/bin/plutil -extract CFBundleShortVersionString raw -expect string "${appInfoPlist}" 2>/dev/null)
+                appVersion="${appVersion#"${appVersion%%[![:space:]]*}"}"
+                appVersion="${appVersion%"${appVersion##*[![:space:]]}"}"
+            fi
+
+            if [[ -z "${appVersion}" ]]; then
+                warning "${humanReadableCheckName}: ${appName} version unknown"
+                vulnerableApps+=("${appName} (version unknown)")
+            else
+                warning "${humanReadableCheckName}: ${appName} Electron version unknown (app ${appVersion})"
+                vulnerableApps+=("${appName} (${appVersion//, /; })")
+            fi
             continue
         fi
 
-        # Detect Electron Framework
-        if grep -Rqs "Electron Framework" "${app}/Contents/Frameworks" 2>/dev/null; then
-            ((foundElectronApps++))
-            local appVersion="Unknown"
-
-            local versionFile="${app}/Contents/Frameworks/Electron Framework.framework/Versions/Current/Resources/version"
-            local frameworkPlist="${app}/Contents/Frameworks/Electron Framework.framework/Versions/Current/Resources/Info.plist"
-            # Fallback to A if Current doesn't work (common in some bundles)
-            if [[ ! -f "${frameworkPlist}" ]]; then
-                frameworkPlist="${app}/Contents/Frameworks/Electron Framework.framework/Versions/A/Resources/Info.plist"
+        # Compare Electron version to fixed thresholds
+        vulnerable=true
+        for fixed in "${fixedVersions[@]}"; do
+            if is-at-least "${fixed}" "${appVersion}"; then
+                vulnerable=false
+                break
             fi
-            local pkgJson="${app}/Contents/Resources/app/package.json"
-            local asarPkgJson="${app}/Contents/Resources/app.asar.unpacked/package.json"
-            local productJson="${app}/Contents/Resources/app/product.json"
-            local versionTxt="${app}/Contents/Resources/app/version.txt"
+        done
 
-            # 1. Canonical Electron version file
-            if [[ -f "${versionFile}" ]]; then
-                appVersion=$(tr -d '[:space:]' < "${versionFile}")
-
-            # 1a. Framework Info.plist (reliable for runtime version) – prioritize CFBundleVersion (common in Electron frameworks)
-            elif [[ -f "${frameworkPlist}" ]]; then
-                appVersion=$(defaults read "${frameworkPlist}" CFBundleVersion 2>/dev/null)
-                if [[ -z "${appVersion}" ]]; then
-                    appVersion=$(defaults read "${frameworkPlist}" CFBundleShortVersionString 2>/dev/null)
-                fi
-                # Debug: Uncomment for troubleshooting
-                # if [[ -n "${appVersion}" ]]; then
-                #     info "${humanReadableCheckName}: Detected Electron version ${appVersion} from framework plist for ${appName}"
-                # else
-                #     warning "${humanReadableCheckName}: Framework plist found but no version keys for ${appName}"
-                # fi
-
-            # 2. package.json electronVersion
-            elif [[ -f "${pkgJson}" ]]; then
-                appVersion=$(grep -Eo '"electronVersion"[^,]*' "${pkgJson}" | awk -F'"' '{print $4}')
-
-            # 3. asar-unpacked package.json
-            elif [[ -f "${asarPkgJson}" ]]; then
-                appVersion=$(grep -Eo '"electronVersion"[^,]*' "${asarPkgJson}" | awk -F'"' '{print $4}')
-
-            # 4. product.json (VS Code, Figma, Discord, etc.)
-            elif [[ -f "${productJson}" ]]; then
-                appVersion=$(grep -Eo '"version"[^,]*' "${productJson}" | awk -F'"' '{print $4}')
-                if [[ ! "${appVersion}" =~ ^[0-9]+\.[0-9]+ ]]; then
-                    local commit=$(grep -Eo '"commit"[^,]*' "${productJson}" | awk -F'"' '{print $4}')
-                    [[ -n "${commit}" ]] && appVersion="custom-${commit:0:7}"
-                fi
-
-            # 5. version.txt fallback (Asana, Notion)
-            elif [[ -f "${versionTxt}" ]]; then
-                appVersion=$(tr -d '[:space:]' < "${versionTxt}")
-            fi
-
-            appVersion=$(echo "${appVersion}" | tr -cd '[:print:]' | xargs)
-
-            # 6. If still unknown, fall back to CFBundleShortVersionString (app version, mark Electron as unknown)
-            if [[ -z "${appVersion}" || "${appVersion}" == "Unknown" ]]; then
-                appVersion=$(defaults read "${app}/Contents/Info.plist" CFBundleShortVersionString 2>/dev/null)
-                if [[ -z "${appVersion}" ]]; then
-                    warning "${humanReadableCheckName}: ${appName} version unknown"
-                    vulnerableApps+=("${appName} (version unknown)")
-                else
-                    warning "${humanReadableCheckName}: ${appName} Electron version unknown (app ${appVersion})"
-                    vulnerableApps+=("${appName} (${appVersion//, /; })")
-                fi
-                continue
-            fi
-
-            # Compare Electron version to fixed thresholds
-            local vulnerable=true
-            for fixed in "${fixedVersions[@]}"; do
-                if is-at-least "${fixed}" "${appVersion}"; then
-                    vulnerable=false
-                    break
-                fi
-            done
-
-            if [[ "${vulnerable}" == true ]]; then
-                vulnerableApps+=("${appName} (${appVersion})")
-            else
-                safeApps+=("${appName} (${appVersion})")
-            fi
+        if [[ "${vulnerable}" == true ]]; then
+            vulnerableApps+=("${appName} (${appVersion})")
+        else
+            safeApps+=("${appName} (${appVersion})")
         fi
     done
 
@@ -5416,7 +5458,8 @@ if [[ "${operationMode}" == "Development" ]]; then
 
     developmentListitemJSON='
     [
-        {"title" : "Homebrew Status", "subtitle" : "If installed, compares the latest Homebrew release and any outdated packages", "icon" : "SF=29.circle,'"${organizationColorScheme}"'", "status" : "pending", "statustext" : "Pending …", "iconalpha" : 0.5}
+        {"title" : "Homebrew Status", "subtitle" : "If installed, compares the latest Homebrew release and any outdated packages", "icon" : "SF=29.circle,'"${organizationColorScheme}"'", "status" : "pending", "statustext" : "Pending …", "iconalpha" : 0.5},
+        {"title" : "Electron Corner Mask", "subtitle" : "Detects susceptible Electron apps that may cause GPU slowdowns on macOS 26 Tahoe", "icon" : "SF=30.circle,'"${organizationColorScheme}"'", "status" : "pending", "statustext" : "Pending …", "iconalpha" : 0.5}
     ]
     '
     # Validate developmentListitemJSON is valid JSON
@@ -5562,6 +5605,7 @@ if [[ "${operationMode}" == "Development" ]]; then
     dialogUpdate "title: ${humanReadableScriptName} (${scriptVersion})<br>Operation Mode: ${operationMode}"
     # set -x
     checkHomebrewStatus "0"
+    checkElectronCornerMask "1"
     # set +x
 
 else

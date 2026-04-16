@@ -1,6 +1,6 @@
 # Mac Health Check: System Architecture
 
-This diagram shows the `4.0.0b2` Mac Health Check ecosystem, from administrator customization through MDM deployment, client-side execution, user interaction, and results output.
+This diagram shows the `4.0.0b3` Mac Health Check ecosystem, from administrator customization through MDM deployment, client-side execution, user interaction, and results output.
 
 ```mermaid
 graph TB
@@ -146,7 +146,7 @@ The script inspects installed configuration profiles to identify the MDM vendor,
 
 ### Runtime Execution
 
-Health checks execute sequentially, with each result posted to the swiftDialog dialog via a named pipe (`dialogUpdate`) and captured into a structured per-check result collector for final reporting. When Dock integration is enabled, non-`Silent` runs also show a Dock icon with a decreasing badge count. After all checks complete, a final summary dialog appears with a countdown timer, non-`Silent` runs with failures also trigger a persistent swiftDialog pseudo-alert notification, and version `4.0.0b2` writes a final JSON health report before cleanup.
+Health checks execute sequentially, with each result posted to the swiftDialog dialog via a named pipe (`dialogUpdate`) and captured into a structured per-check result collector for final reporting. When Dock integration is enabled, non-`Silent` runs also show a Dock icon with a decreasing badge count. After all checks complete, a final summary dialog appears with a countdown timer, non-`Silent` runs with failures also trigger a persistent swiftDialog pseudo-alert notification, and version `4.0.0b3` writes a final JSON health report before cleanup.
 
 ---
 
