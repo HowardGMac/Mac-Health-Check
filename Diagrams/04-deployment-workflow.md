@@ -252,7 +252,7 @@ Use the three developer-oriented modes to validate behavior before rolling out t
 After production deployment, monitor:
 
 - **Client logs** at `/var/log/org.churchofjesuschrist.log` on managed Macs — look for `[WARNING]` and `[ERROR]` entries
-- **Dock badge, inspect summary handoff, and persistent failure notifications** on test Macs in non-`Silent` modes — confirm countdown badges update per check, `Self Service` launches the detached preset5 summary, and failed runs still show the current pseudo-alert summary and support action
+- **Dock badge, inspect summary handoff, cached replay, and persistent failure notifications** on test Macs in non-`Silent` modes — confirm countdown badges update per check, `Self Service` launches the detached preset4 dashboard summary during the retained main-dialog countdown, reruns within 15 minutes replay the cached summary without re-running checks, and failed runs still show the current pseudo-alert summary and support action
 - **Webhook notifications** in Teams or Slack (if configured) — review failure summaries
 - **MDM inventory** — for Jamf Pro, each run can trigger a recon; use Smart Group criteria based on extension attributes for fleet-wide compliance visibility
 

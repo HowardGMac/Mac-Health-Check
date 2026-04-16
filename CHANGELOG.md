@@ -4,9 +4,9 @@
 
 ### 4.0.0b4 (16-Apr-2026)
 - Added JSON health reporting (with optional Splunk HTTP Event Collector (HEC) delivery)
-- Added a standalone swiftDialog Inspect Mode `preset5` summary for `Self Service` runs
-- Raised the minimum required swiftDialog version to `3.1.0.4976`
+- Added a detached swiftDialog Inspect Mode `preset4` dashboard summary plus cached replay (i.e., `inspectReplayMaximumAgeSeconds`) for `Self Service` runs
 - Refactored `checkElectronCornerMask` to reduce execution time
+- Raised the minimum required swiftDialog version to `3.1.0.4976`
 
 ### 3.2.0 (02-Apr-2026)
 - Preserved user-provided local `organizationOverlayiconURL` files by downloading remote overlay icons to a per-run temporary file and only cleaning up that script-managed asset at exit (Thanks for the heads-up, @brian_b!)

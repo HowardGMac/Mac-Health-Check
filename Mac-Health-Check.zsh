@@ -17,11 +17,11 @@
 #
 # HISTORY
 #
-# Version 4.0.0b3, 16-Apr-2026, Dan K. Snelson (@dan-snelson)
+# Version 4.0.0b4, 16-Apr-2026, Dan K. Snelson (@dan-snelson)
 # - Added JSON health reporting (with optional Splunk HTTP Event Collector (HEC) delivery)
-# - Added a standalone swiftDialog Inspect Mode `preset5` summary for `Self Service` runs
-# - Raised the minimum required swiftDialog version to `3.1.0.4976`
+# - Added a detached swiftDialog Inspect Mode (i.e., `inspectSummaryPreset`) summary plus cached replay (i.e., `inspectReplayMaximumAgeSeconds`) for `Self Service` runs
 # - Refactored `checkElectronCornerMask` to reduce execution time
+# - Raised the minimum required swiftDialog version to `3.1.0.4976`
 #
 ####################################################################################################
 
@@ -36,7 +36,7 @@
 export PATH=/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin/
 
 # Script Version
-scriptVersion="4.0.0b3"
+scriptVersion="4.0.0b4"
 
 # Client-side Log
 scriptLog="/var/log/org.churchofjesuschrist.log"
@@ -45,7 +45,7 @@ scriptLog="/var/log/org.churchofjesuschrist.log"
 autoload -Uz is-at-least
 
 # Minimum Required Version of swiftDialog
-swiftDialogMinimumRequiredVersion="3.0.1.4955"
+swiftDialogMinimumRequiredVersion="3.1.0.4976"
 
 # Force locale to English (so `date` does not error on localization formatting)
 LANG="en_us_88591"
@@ -178,6 +178,11 @@ completionTimer="60"
 # --- New in `4.0.0` ------------------------------------------------------------------------------
 # Splunk and JSON reporting defaults
 splunkJSONReportPath="/var/tmp/MacHealthCheck-Report.json"
+inspectCompliancePlistPath="/var/tmp/MacHealthCheck-Inspect-Compliance.plist"
+inspectConfigPath="/var/tmp/MacHealthCheck-Inspect-Config.json"
+inspectLaunchLogPath="/var/tmp/MacHealthCheck-Inspect-Summary.log"
+inspectSummaryPreset="3"
+inspectReplayMaximumAgeSeconds="9000"
 splunkPrettyPrintJSON="false"
 splunkReportDebug="false"
 splunkAllowInsecureTLS="false"
@@ -1671,6 +1676,29 @@ function runAsUser() {
 
 }
 
+function launchAsUserInBackground() {
+    local user="$1"
+    shift
+    local userID=""
+
+    if [[ -z "${user}" ]]; then
+        "$@" &
+        dialogPID=$!
+        return 0
+    fi
+
+    userID="$( id -u "${user}" 2>/dev/null )"
+    if [[ ! "${userID}" == <-> ]]; then
+        errorOut "Unable to resolve user ID for '${user}' while launching background process"
+        return 1
+    fi
+
+    launchctl asuser "${userID}" sudo -u "${user}" "$@" &
+    dialogPID=$!
+    return 0
+
+}
+
 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -2206,6 +2234,24 @@ function writeSecureJSONFile() {
 
 }
 
+function writeReadableTextFile() {
+
+    local targetPath="${1}"
+    local filePayload="${2}"
+    local previousUmask=""
+
+    previousUmask="$( umask )"
+    umask 022
+    printf '%s\n' "${filePayload}" > "${targetPath}"
+    umask "${previousUmask}"
+
+    chmod 644 "${targetPath}" 2>/dev/null
+    if [[ $(id -u) -eq 0 ]]; then
+        chown root:wheel "${targetPath}" 2>/dev/null
+    fi
+
+}
+
 function sanitizeSplunkURLForLog() {
 
     local sanitizedURL="${1}"
@@ -2362,6 +2408,376 @@ function generateAndSendSplunkReport() {
     fi
 
     sendSplunkHECPayload "${reportHECPayload}"
+
+}
+
+function xmlEscape() {
+
+    local escapedValue="${1}"
+
+    escapedValue="${escapedValue//&/&amp;}"
+    escapedValue="${escapedValue//</&lt;}"
+    escapedValue="${escapedValue//>/&gt;}"
+    escapedValue="${escapedValue//\"/&quot;}"
+    escapedValue="${escapedValue//\'/&apos;}"
+
+    printf '%s' "${escapedValue}"
+
+}
+
+function getInspectSummaryTitle() {
+
+    case "${reportOverallStatus}" in
+        "healthy" )
+            echo "Computer Healthy"
+            ;;
+        "warning" )
+            echo "Computer Needs Attention"
+            ;;
+        "fail" )
+            echo "Computer Unhealthy"
+            ;;
+        * )
+            echo "Computer Check Incomplete"
+            ;;
+    esac
+
+}
+
+function getInspectSummaryMessage() {
+
+    case "${reportOverallStatus}" in
+        "healthy" )
+            echo "Summary of the completed Mac Health Check run. All executed checks are compliant, and only healthy results count as compliant."
+            ;;
+        "warning" )
+            echo "Summary of the completed Mac Health Check run. Some executed checks need attention, and only healthy results count as compliant."
+            ;;
+        "fail" )
+            echo "Summary of the completed Mac Health Check run. One or more executed checks failed, and only healthy results count as compliant."
+            ;;
+        * )
+            echo "Summary of the completed Mac Health Check run. One or more executed checks could not be evaluated cleanly, and only healthy results count as compliant."
+            ;;
+    esac
+
+}
+
+function getInspectSummaryIcon() {
+
+    case "${reportOverallStatus}" in
+        "healthy" )
+            echo "sf=checkmark.circle.fill,colour=#16a34a,weight=bold"
+            ;;
+        "warning" )
+            echo "sf=exclamationmark.triangle.fill,colour=#f59e0b,weight=bold"
+            ;;
+        "fail" )
+            echo "sf=xmark.octagon.fill,colour=#dc2626,weight=bold"
+            ;;
+        * )
+            echo "sf=questionmark.circle.fill,colour=#dc2626,weight=bold"
+            ;;
+    esac
+
+}
+
+function getInspectCategoryForCheck() {
+
+    local checkTitle="${1}"
+
+    case "${checkTitle}" in
+        "macOS Version" | "System Integrity Protection" | "Signed System Volume" | "Firewall" | "FileVault Encryption" | "Gatekeeper / XProtect" | "Touch ID" | "Password Hint" | "AirDrop" | "AirPlay Receiver" | "Bluetooth Sharing" )
+            echo "Security"
+            ;;
+        "Available Updates" | "Last Reboot" | "Free Disk Space" | "Desktop Size and Item Count" | "Downloads Size and Item Count" | "Trash Size and Item Count" )
+            echo "Maintenance"
+            ;;
+        *" MDM Profile" | *" MDM Certificate Expiration" | "Apple Push Notification service" | "Jamf Pro Check-In" | "Jamf Pro Inventory" | "Mosyle Check-In" | "Computer Inventory" )
+            echo "Management"
+            ;;
+        "VPN Client" | "Apple Push Notification Hosts" | "Apple Device Management" | "Apple Software and Carrier Updates" | "Apple Certificate Validation" | "Apple Identity and Content Services" | "Jamf Hosts" | "Network Quality Test" )
+            echo "Connectivity"
+            ;;
+        "App Auto-Patch" | "Homebrew Status" | "Electron Corner Mask" | "Microsoft Teams" | "Microsoft Company Portal" | "Fleet Desktop" | *"Self-Service" | "BeyondTrust Privilege Management" | "Cisco Umbrella" | "CrowdStrike Falcon" | "Palo Alto GlobalProtect" )
+            echo "Applications"
+            ;;
+        * )
+            echo "Applications"
+            ;;
+    esac
+
+}
+
+function buildInspectCompatibilityPlist() {
+
+    local inspectTimestamp="${reportTimestamp:-$( date '+%Y-%m-%dT%H:%M:%S%z' | sed -E 's/(..)$/:\1/' )}"
+    local plistXML=$'<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n'
+    local checkKey=""
+    local checkStatus=""
+
+    plistXML+=$'\t<key>overallStatus</key>\n\t<string>'"$( xmlEscape "${reportOverallStatus}" )"$'</string>\n'
+    plistXML+=$'\t<key>scriptVersion</key>\n\t<string>'"$( xmlEscape "${scriptVersion}" )"$'</string>\n'
+    plistXML+=$'\t<key>timestamp</key>\n\t<string>'"$( xmlEscape "${inspectTimestamp}" )"$'</string>\n'
+
+    for (( i=0; i<listitemLength; i++ )); do
+        if [[ "${checkExecutedByIndex[${i}]}" == "true" ]]; then
+            checkKey="${checkKeyByIndex[${i}]}"
+            [[ -z "${checkKey}" ]] && checkKey="$( sanitizeCheckKey "${checkTitleByIndex[${i}]}" )"
+            checkStatus="${checkNormalizedStatusByIndex[${i}]}"
+            plistXML+=$'\t<key>check_status_'"$( xmlEscape "${checkKey}" )"$'</key>\n\t<string>'"$( xmlEscape "${checkStatus}" )"$'</string>\n'
+        fi
+    done
+
+    plistXML+=$'</dict>\n</plist>'
+    printf '%s' "${plistXML}"
+
+}
+
+function buildInspectItemsJSONArray() {
+
+    local itemsJSON="["
+    local separator=""
+    local checkTitle=""
+    local checkKey=""
+    local category=""
+
+    for (( i=0; i<listitemLength; i++ )); do
+        if [[ "${checkExecutedByIndex[${i}]}" == "true" ]]; then
+            checkTitle="${checkTitleByIndex[${i}]}"
+            checkKey="${checkKeyByIndex[${i}]}"
+            [[ -z "${checkKey}" ]] && checkKey="$( sanitizeCheckKey "${checkTitle}" )"
+            category="$( getInspectCategoryForCheck "${checkTitle}" )"
+
+            itemsJSON+="${separator}{"
+            itemsJSON+="\"id\":$( jsonString "${checkKey}" ),"
+            itemsJSON+="\"displayName\":$( jsonString "${checkTitle}" ),"
+            itemsJSON+="\"guiIndex\":${i},"
+            itemsJSON+="\"paths\":[$( jsonString "${inspectCompliancePlistPath}" )],"
+            itemsJSON+="\"plistKey\":$( jsonString "check_status_${checkKey}" ),"
+            itemsJSON+="\"expectedValue\":\"healthy\","
+            itemsJSON+="\"evaluation\":\"equals\","
+            itemsJSON+="\"category\":$( jsonString "${category}" )"
+            itemsJSON+="}"
+            separator=","
+        fi
+    done
+
+    itemsJSON+="]"
+    printf '%s' "${itemsJSON}"
+
+}
+
+function buildInspectConfigJSON() {
+
+    local inspectTitle="$( getInspectSummaryTitle )"
+    local inspectMessage="$( getInspectSummaryMessage )"
+    local itemsJSON="$( buildInspectItemsJSONArray )"
+    local inspectIcon="$( getInspectSummaryIcon )"
+    local inspectHighlightColor="#51a3ef"
+
+    printf '%s' "{"
+    printf '%s' "\"preset\":$( jsonString "${inspectSummaryPreset}" ),"
+    printf '%s' "\"title\":$( jsonString "${inspectTitle}" ),"
+    printf '%s' "\"message\":$( jsonString "${inspectMessage}" ),"
+    printf '%s' "\"icon\":$( jsonString "${inspectIcon}" ),"
+    printf '%s' "\"size\":\"large\","
+    printf '%s' "\"style\":\"cards\","
+    printf '%s' "\"highlightColor\":$( jsonString "${inspectHighlightColor}" ),"
+    printf '%s' "\"button1text\":\"Close\","
+    printf '%s' "\"button1disabled\":true,"
+    printf '%s' "\"autoEnableButton\":true,"
+    printf '%s' "\"autoEnableButtonText\":\"Close\","
+    printf '%s' "\"button2visible\":false,"
+    printf '%s' "\"items\":${itemsJSON}"
+    printf '%s' "}"
+
+}
+
+function validateInspectCompatibilityPlist() {
+    /usr/bin/plutil -lint "${inspectCompliancePlistPath}" >/dev/null 2>&1
+}
+
+function validateInspectConfigFile() {
+
+    jq -e \
+        --arg inspectSummaryPreset "${inspectSummaryPreset}" \
+        '.preset == $inspectSummaryPreset
+        and .button1text == "Close"
+        and .button1disabled == true
+        and .autoEnableButton == true
+        and .autoEnableButtonText == "Close"
+        and .button2visible == false
+        and (.items | type == "array")
+        and (.items | length > 0)' \
+        "${inspectConfigPath}" >/dev/null 2>&1
+
+}
+
+function prepareInspectConfigForUser() {
+
+    local inspectConfigToPrepare="${1:-${inspectConfigPath}}"
+
+    if [[ ! -e "${inspectConfigToPrepare}" ]]; then
+        warning "Inspect Summary: config file is unavailable at ${inspectConfigToPrepare}."
+        return 1
+    fi
+
+    if ! chown "${loggedInUser}" "${inspectConfigToPrepare}" 2>/dev/null; then
+        warning "Inspect Summary: failed to set ownership on ${inspectConfigToPrepare} for ${loggedInUser}."
+        return 1
+    fi
+
+    if ! chmod 600 "${inspectConfigToPrepare}" 2>/dev/null; then
+        warning "Inspect Summary: failed to set permissions on ${inspectConfigToPrepare} for ${loggedInUser}."
+        return 1
+    fi
+
+    return 0
+
+}
+
+function prepareInspectLaunchLogForUser() {
+
+    if ! : > "${inspectLaunchLogPath}" 2>/dev/null; then
+        warning "Inspect Summary: failed to create ${inspectLaunchLogPath}."
+        return 1
+    fi
+
+    if ! chown "${loggedInUser}" "${inspectLaunchLogPath}" 2>/dev/null; then
+        warning "Inspect Summary: failed to set ownership on ${inspectLaunchLogPath} for ${loggedInUser}."
+        return 1
+    fi
+
+    if ! chmod 600 "${inspectLaunchLogPath}" 2>/dev/null; then
+        warning "Inspect Summary: failed to set permissions on ${inspectLaunchLogPath} for ${loggedInUser}."
+        return 1
+    fi
+
+    return 0
+
+}
+
+function generateInspectSummaryAssets() {
+
+    local inspectPlistPayload=""
+    local inspectConfigJSON=""
+
+    inspectPlistPayload="$( buildInspectCompatibilityPlist )"
+    inspectConfigJSON="$( buildInspectConfigJSON )"
+
+    if ! validateJson "${inspectConfigJSON}"; then
+        warning "Inspect Summary: generated inspect config JSON failed validation."
+        return 1
+    fi
+
+    writeReadableTextFile "${inspectCompliancePlistPath}" "${inspectPlistPayload}"
+    if ! validateInspectCompatibilityPlist; then
+        warning "Inspect Summary: failed to validate ${inspectCompliancePlistPath}."
+        return 1
+    fi
+
+    writeReadableTextFile "${inspectConfigPath}" "${inspectConfigJSON}"
+    if ! validateInspectConfigFile; then
+        warning "Inspect Summary: failed to validate ${inspectConfigPath}."
+        return 1
+    fi
+
+    if ! prepareInspectConfigForUser "${inspectConfigPath}"; then
+        return 1
+    fi
+
+    notice "Inspect Summary: wrote ${inspectCompliancePlistPath} and ${inspectConfigPath}."
+    return 0
+
+}
+
+function launchInspectSummary() {
+
+    local inspectConfigToLaunch="${1:-${inspectConfigPath}}"
+    local inspectPID=""
+    local launchCommand=""
+
+    if [[ ! -r "${inspectConfigToLaunch}" ]]; then
+        warning "Inspect Summary: config file is not readable at ${inspectConfigToLaunch}."
+        return 1
+    fi
+
+    if ! prepareInspectConfigForUser "${inspectConfigToLaunch}"; then
+        return 1
+    fi
+
+    if ! prepareInspectLaunchLogForUser; then
+        return 1
+    fi
+
+    launchCommand="/usr/bin/nohup /usr/bin/env DIALOG_INSPECT_CONFIG=${(q)inspectConfigToLaunch} DIALOG_DEBUG=1 ${(q)dialogBinary} --inspect-mode --inspect-config ${(q)inspectConfigToLaunch} >${(q)inspectLaunchLogPath} 2>&1 </dev/null & print -r -- \$!"
+    inspectPID="$( runAsUser /bin/zsh -lc "${launchCommand}" 2>/dev/null | tr -d '[:space:]' )"
+
+    if [[ ! "${inspectPID}" == <-> ]]; then
+        warning "Inspect Summary: detached launch did not return a valid PID. Review ${inspectLaunchLogPath}."
+        return 1
+    fi
+
+    notice "Inspect Summary: launched detached ${inspectSummaryPreset} summary (PID ${inspectPID}; log ${inspectLaunchLogPath})."
+    return 0
+
+}
+
+function replayCachedInspectSummaryIfEligible() {
+
+    local configJSON=""
+    local configFileEpoch=""
+    local configFileAgeSeconds="0"
+
+    if [[ "${operationMode}" != "Self Service" ]]; then
+        return 1
+    fi
+
+    if [[ ! -r "${inspectConfigPath}" ]]; then
+        return 1
+    fi
+
+    if [[ ! -r "${inspectCompliancePlistPath}" ]]; then
+        warning "Inspect Summary Replay: compatibility plist missing; running full health check."
+        return 1
+    fi
+
+    configFileEpoch="$( stat -f "%m" "${inspectConfigPath}" 2>/dev/null )"
+    if [[ ! "${configFileEpoch}" == <-> ]]; then
+        warning "Inspect Summary Replay: unable to determine config age; running full health check."
+        return 1
+    fi
+
+    configFileAgeSeconds=$(( $( date +%s ) - configFileEpoch ))
+    if (( configFileAgeSeconds < 0 || configFileAgeSeconds >= inspectReplayMaximumAgeSeconds )); then
+        info "Inspect Summary Replay: cached config is older than ${inspectReplayMaximumAgeSeconds} seconds; running full health check."
+        return 1
+    fi
+
+    configJSON="$(<"${inspectConfigPath}")"
+    if ! validateJson "${configJSON}"; then
+        warning "Inspect Summary Replay: cached config JSON is invalid for Preset ${inspectSummaryPreset}; running full health check."
+        return 1
+    fi
+
+    if ! validateInspectConfigFile; then
+        warning "Inspect Summary Replay: cached config structure is invalid for Preset ${inspectSummaryPreset}; running full health check."
+        return 1
+    fi
+
+    if ! validateInspectCompatibilityPlist; then
+        warning "Inspect Summary Replay: cached compatibility plist is invalid for Preset ${inspectSummaryPreset}; running full health check."
+        return 1
+    fi
+
+    notice "Inspect Summary Replay: launching cached Preset ${inspectSummaryPreset} summary from the last ${inspectReplayMaximumAgeSeconds} seconds."
+    if launchInspectSummary "${inspectConfigPath}"; then
+        return 0
+    fi
+
+    warning "Inspect Summary Replay: detached launch failed for Preset ${inspectSummaryPreset}; running full health check."
+    return 1
 
 }
 
@@ -2578,6 +2994,7 @@ function displayFailureNotification() {
 function quitScript() {
 
     local problemCheckCount=0
+    local inspectSummaryLaunched="false"
 
     rebuildOverallHealthFromRecordedResults
     calculateOverallReportStatus
@@ -2617,11 +3034,23 @@ function quitScript() {
 
     generateAndSendSplunkReport
 
+    if [[ "${operationMode}" == "Self Service" ]]; then
+        if generateInspectSummaryAssets && launchInspectSummary; then
+            inspectSummaryLaunched="true"
+        else
+            info "Inspect Summary: continuing with the standard completion countdown."
+        fi
+    fi
+
     if [[ "${operationMode}" != "Silent" ]]; then
         dialogUpdate "progress: 100"
         dialogUpdate "progresstext: Elapsed Time: $(printf '%dh:%dm:%ds\n' $((SECONDS/3600)) $((SECONDS%3600/60)) $((SECONDS%60)))"
         dialogUpdate "button1text: Close"
         dialogUpdate "button1: enable"
+
+        if [[ "${inspectSummaryLaunched}" == "true" ]]; then
+            notice "Inspect Summary: detached ${inspectSummaryPreset} summary launched; retaining the existing completion countdown on the main dialog."
+        fi
         
         sleep "${anticipationDuration}"
 
@@ -2869,6 +3298,11 @@ fi
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 preFlight "Complete"
+
+if replayCachedInspectSummaryIfEligible; then
+    quitOut "Replayed cached inspect summary."
+    exit 0
+fi
 
 
 

@@ -7,7 +7,8 @@ This text-only reference documents the key configurable defaults and runtime inv
 ## 4.0.0b4 Runtime Notes
 
 - `operationMode` is documented for the `4.0.0b4` release as `Self Service` by default, with `Silent`, `Debug`, `Development`, and `Test` also supported.
-- `Self Service` runs now generate readable inspect-summary handoff files and attempt to launch a detached swiftDialog Inspect Mode `preset5` summary after the canonical report is written.
+- `Self Service` runs now generate readable inspect-summary handoff files, launch a detached swiftDialog Inspect Mode `preset4` dashboard summary after the canonical report is written, and retain the normal main-dialog completion countdown during full runs.
+- Re-running in `Self Service` within 15 minutes can replay the cached inspect summary immediately when the handoff assets are still valid.
 - Non-`Silent` runs with failures trigger `displayFailureNotification()`, which presents a persistent swiftDialog pseudo-alert summary of failed health checks.
 - Pre-flight requires swiftDialog `3.1.0.4976` or newer.
 - When `enableDockIntegration` is `true`, non-`Silent` runs show a Dock icon with a decreasing `dockiconbadge` count.

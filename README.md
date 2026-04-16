@@ -16,7 +16,7 @@ Deployment of Mac Health Check involves configuring organizational defaults, emb
 
 Administrators can customize the user interface using swiftDialog’s visual capabilities, making the experience both informative and approachable.
 
-The tool logs results for review, writes a structured JSON health report locally, can optionally forward that report to Splunk HEC, and continues to avoid altering device configuration. In `Self Service`, `4.0.0b4` can now hand off to a detached swiftDialog Inspect Mode `preset5` summary built from finalized report data, while `Silent` remains well-suited for background IT visibility without end-user intrusion.
+The tool logs results for review, writes a structured JSON health report locally, can optionally forward that report to Splunk HEC, and continues to avoid altering device configuration. In `Self Service`, `4.0.0b4` now launches a detached swiftDialog Inspect Mode `preset4` dashboard summary built from finalized report data while retaining the main dialog's 60-second completion countdown, and reruns within 15 minutes can replay that cached summary without re-running health checks. `Silent` remains well-suited for background IT visibility without end-user intrusion.
 
 The current `4.0.0b4` beta expects swiftDialog `3.1.0.4976` or newer so `Self Service` can launch the detached inspect summary.
 
@@ -57,7 +57,7 @@ Mac Health Check is particularly valuable in IT support workflows, serving as an
 ## Features
 The following health checks and information reporting are included in version `4.0.0b4`, which operates in `Self Service` mode by default. (Change `operationMode` to `Debug`, `Development` or `Test` when getting ready to deploy in production.)
 
-> :new: Mac Health Check version `4.0.0b4` retains secure JSON report generation and optional Splunk HEC delivery, while adding a detached `Self Service` Inspect Mode `preset5` summary and keeping the current persistent failed-health notification behavior.
+> :new: Mac Health Check version `4.0.0b4` retains secure JSON report generation and optional Splunk HEC delivery, adds a detached `Self Service` Inspect Mode `preset4` dashboard summary, preserves the main dialog countdown for normal runs, and supports 15-minute cached summary replay on rerun.
  
 <img src="images/MHC_3.2.0_failure_notification.png" alt="Health Checks" width="400"/>
 
@@ -125,9 +125,10 @@ The following health checks and information reporting are included in version `4
 - Preserves local report generation in `splunkOperationMode=test` while intentionally skipping network transmission
 - Requires `jq` for JSON validation and formatting, with local report generation and Splunk payload assembly stopping at pre-flight if `jq` is unavailable
 
-#### :new: Self Service Inspect Summary
+#### :new: Self Service Inspect Mode Summary
 - `Self Service` runs now generate `/var/tmp/MacHealthCheck-Inspect-Compliance.plist` and `/var/tmp/MacHealthCheck-Inspect-Config.json` from finalized in-memory results
-- The main progress dialog closes immediately after a successful handoff to a detached swiftDialog Inspect Mode `preset5` summary, so Jamf Pro Self Service is not held by the original script process
+- Normal `Self Service` runs launch the detached swiftDialog Inspect Mode `preset4` dashboard summary after report generation while retaining the existing 60-second main-dialog countdown
+- Re-running `zsh Mac-Health-Check.zsh` within `inspectReplayMaximumAgeSeconds` (i.e., 15 minutes), replays the cached inspect summary immediately and skips the health checks plus the main dialog countdown
 - Unhealthy `Self Service` runs still show the existing persistent failure pseudo-alert before the inspect summary launches
 - If inspect-summary asset generation or launch fails, Mac Health Check falls back to the existing `completionTimer` countdown path
 - Requires swiftDialog `3.1.0.4976` or newer

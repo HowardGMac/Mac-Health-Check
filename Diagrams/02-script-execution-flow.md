@@ -35,6 +35,8 @@ graph TB
         SDCHECK{"swiftDialog<br>≥ 3.1.0.4976?"}
         SDINSTALL["Download & install<br>swiftDialog from GitHub"]
         KILLSD["Kill existing<br>Dialog instances"]
+        REPLAYCHECK{"Self Service cached inspect config<br>< 15 minutes old and valid?"}
+        REPLAYLAUNCH["Launch cached preset4 summary<br>skip checks and exit"]
         DOCKBADGE["Prepare Dock launch state<br>and initial badge<br>(non-Silent when enabled)"]
 
         SETX --> PREFLIGHT_START
@@ -45,7 +47,9 @@ graph TB
         SDCHECK -->|No| SDINSTALL
         SDINSTALL --> KILLSD
         SDCHECK -->|Yes| KILLSD
-        KILLSD --> DOCKBADGE
+        KILLSD --> REPLAYCHECK
+        REPLAYCHECK -->|Yes| REPLAYLAUNCH
+        REPLAYCHECK -->|No| DOCKBADGE
 
         style PREFLIGHT_START fill:#b2dfdb
         style ROOTCHECK fill:#ffecb3
@@ -53,6 +57,8 @@ graph TB
         style SDCHECK fill:#ffecb3
         style SDINSTALL fill:#fff4e6
         style KILLSD fill:#fff4e6
+        style REPLAYCHECK fill:#ffecb3
+        style REPLAYLAUNCH fill:#c8e6c9
         style DOCKBADGE fill:#e1f5ff
         style FATAL1 fill:#ffcdd2
     end
@@ -145,7 +151,7 @@ graph TB
         REPORT["Write canonical local JSON report<br>and optional Splunk HEC payload"]
         COMPLETIONUI{"Non-Silent mode?"}
         INSPECTHANDOFF{"Self Service inspect handoff<br>succeeds?"}
-        INSPECT["Launch detached preset5 summary<br>quit main dialog immediately"]
+        INSPECT["Launch detached preset4 summary<br>retain main dialog countdown"]
         COMPLETIONTIMER["Display completion timer<br>enable Close button"]
         CLEANUP["Remove temp files<br>clear Dock badge"]
         EXIT(["⏹ Script Exits"])
@@ -160,11 +166,12 @@ graph TB
         WEBHOOK -->|No| REPORT
         SENDWEBHOOK --> REPORT
         REPORT --> COMPLETIONUI
+        REPLAYLAUNCH --> EXIT
         COMPLETIONUI -->|Yes| INSPECTHANDOFF
         COMPLETIONUI -->|No| CLEANUP
         INSPECTHANDOFF -->|Yes| INSPECT
         INSPECTHANDOFF -->|No| COMPLETIONTIMER
-        INSPECT --> CLEANUP
+        INSPECT --> COMPLETIONTIMER
         COMPLETIONTIMER --> CLEANUP
         CLEANUP --> EXIT
 
@@ -221,9 +228,12 @@ If `webhookURL` (Parameter 5) is populated and failures are detected, `quitScrip
 At the end of the run, `generateAndSendSplunkReport()` writes the canonical local JSON report and, when `splunkOperationMode=production` plus Parameters 7 and 8 are configured, optionally delivers a Splunk HEC envelope. `splunkOperationMode=off` or `test` still generates the report but skips network transmission.
 
 ### 10. Self Service Inspect Summary
-In `Self Service`, the script uses finalized in-memory results to generate `/var/tmp/MacHealthCheck-Inspect-Compliance.plist` and `/var/tmp/MacHealthCheck-Inspect-Config.json`, then tries to launch a detached swiftDialog Inspect Mode `preset5` summary. If that handoff succeeds, the main dialog closes immediately; if not, the script falls back to the existing `completionTimer` countdown.
+In `Self Service`, the script uses finalized in-memory results to generate `/var/tmp/MacHealthCheck-Inspect-Compliance.plist` and `/var/tmp/MacHealthCheck-Inspect-Config.json`, then tries to launch a detached swiftDialog Inspect Mode `preset4` dashboard summary. On a normal run, the existing `completionTimer` countdown remains on the main dialog whether the detached summary launches or not.
 
-### 11. Failure Notification
+### 11. Self Service Cached Replay
+If `/var/tmp/MacHealthCheck-Inspect-Config.json` is less than 15 minutes old and both inspect handoff assets still validate, a rerun in `Self Service` skips health checks entirely, launches the cached `preset4` dashboard summary immediately, and exits without showing the main dialog countdown.
+
+### 12. Failure Notification
 When non-`Silent` runs detect failures, `displayFailureNotification()` launches a persistent swiftDialog pseudo-alert summarizing the failed health checks and offering a support action link.
 
 ---
@@ -234,7 +244,8 @@ When non-`Silent` runs detect failures, `displayFailureNotification()` launches 
 |---|---|---|
 | Fatal: Not root | `EUID != 0` | Yes (`[FATAL ERROR]`) |
 | Normal: Silent | All checks complete, no UI | Yes |
-| Normal: Self Service | Detached `preset5` summary launches and main dialog quits immediately, or the countdown fallback is used if handoff fails | Yes |
+| Normal: Self Service | Detached `preset4` dashboard summary launches after report generation and the main dialog still completes its normal countdown | Yes |
+| Replay: Self Service cached summary | Fresh inspect config launches cached `preset4` dashboard summary and skips the health-check loop | Yes |
 | Normal: Test | Current vendor list items simulated as success | Yes |
 | Normal: With failure notification | Non-`Silent` failures trigger pseudo-alert summary | Yes |
 | Normal: With webhook | Failed run posts webhook before report generation and final UI cleanup | Yes |
