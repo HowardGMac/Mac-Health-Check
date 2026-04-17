@@ -17,7 +17,7 @@
 #
 # HISTORY
 #
-# Version 4.0.0b8, 17-Apr-2026, Dan K. Snelson (@dan-snelson)
+# Version 4.0.0b9, 17-Apr-2026, Dan K. Snelson (@dan-snelson)
 # - Added JSON health reporting (with optional Splunk HTTP Event Collector (HEC) delivery)
 # - Added a detached swiftDialog Inspect Mode (i.e., `inspectSummaryPreset="on"`) summary plus cached replay (i.e., `inspectReplayMaximumAgeSeconds`) for `Self Service` runs
 # - Refactored `checkElectronCornerMask` to reduce execution time
@@ -37,7 +37,7 @@
 export PATH=/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin/
 
 # Script Version
-scriptVersion="4.0.0b8"
+scriptVersion="4.0.0b9"
 
 # Client-side Log
 scriptLog="/var/log/org.churchofjesuschrist.log"
@@ -104,7 +104,7 @@ organizationSelfServiceMarketingName="Workforce App Store"
 organizationBoilerplateComplianceMessage="Meets organizational standards"
 
 # Organization's Branding Banner URL
-organizationBrandingBannerURL="https://img.freepik.com/free-photo/abstract-textured-backgound_1258-30469.jpg" # [Image by benzoix on Freepik](https://www.freepik.com/author/benzoix)
+organizationBrandingBannerURL="https://img.freepik.com/free-photo/black-wall-texture_1194-5564.jpg" # [Image by rawpixel.com on Freepik](https://www.freepik.com/author/rawpixel-com)
 
 # Organization's Overlayicon URL
 organizationOverlayiconURL="/System/Library/CoreServices/Apple Diagnostics.app"
@@ -121,16 +121,16 @@ organizationDefaultsDomain="org.churchofjesuschrist.external"
 # Organization's Color Scheme
 if [[ $( defaults read /Users/$(stat -f %Su /dev/console)/Library/Preferences/.GlobalPreferences.plist AppleInterfaceStyle 2>/dev/null ) == "Dark" ]]; then
     # Dark Mode
-    organizationColorScheme="weight=semibold,colour1=#2E5B91,colour2=#4291C8"
+    organizationColorScheme="weight=semibold,colour1=#D1D5DC,colour2=#F5F5F5"
 else
     # Light Mode
-    organizationColorScheme="weight=semibold,colour1=#2E5B91,colour2=#4291C8"
+    organizationColorScheme="weight=semibold,colour1=#18181B,colour2=#4D4D56"
 fi
 
 # Status Colors
-statusColorSuccess="#63CA56"
-statusColorFail="#EB5545"
-statusColorError="#F8D84A"
+statusColorSuccess="#65C466"
+statusColorFail="#EB4C46"
+statusColorError="#F5BE0A"
 
 # Organization's Kerberos Realm (leave blank to disable check)
 kerberosRealm=""
@@ -3244,7 +3244,7 @@ function buildInspectItemsJSONArray() {
 
 function buildInspectConfigJSON() {
 
-    local inspectHighlightColor="#007AFF"
+    local inspectHighlightColor="#F69325"
 
     printf '%s' "{"
     printf '%s' "\"preset\":\"6\","
@@ -4006,6 +4006,7 @@ fi
 function checkOS() {
 
     local humanReadableCheckName="macOS Version"
+    local footerStatusColor="${statusColorSuccess}"
     notice "Check ${humanReadableCheckName} …"
 
     dialogUpdate "icon: SF=pencil.and.list.clipboard,${organizationColorScheme}"
@@ -4025,6 +4026,7 @@ function checkOS() {
         logComment "OS Build, ${osBuild}, ends with a letter and ProductVersionExtra is empty; treating as beta"
         osResult="Beta macOS ${osVersion} (${osBuild})"
         dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorError}, iconalpha: 1, subtitle: Beta builds of macOS are purposely marked as unsupported, status: error, statustext: ${osResult}"
+        footerStatusColor="${statusColorError}"
         warning "${osResult}"
     
     else
@@ -4111,6 +4113,7 @@ function checkOS() {
             osResult="Unsupported macOS"
             result "$osResult"
             dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorError}, iconalpha: 1, status: error, statustext: ${osResult}"
+            footerStatusColor="${statusColorError}"
             # return 1
         fi
 
@@ -4160,16 +4163,21 @@ function checkOS() {
 
         if [[ "$latest_version_match" == true ]] || [[ "$security_update_within_30_days" == true ]] || [[ "$n_rule" == true ]]; then
             osResult="macOS ${osVersion} (${osBuild})"
-            dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.6, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: ${osResult}"
+            dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: ${osResult}"
+            footerStatusColor="${statusColorSuccess}"
             info "${osResult}"
         else
             osResult="macOS ${osVersion} (${osBuild})"
             dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorFail}, iconalpha: 1, subtitle: Please update to a supported macOS version via System Settings > General > Software Update, status: fail, statustext: ${osResult}"
+            footerStatusColor="${statusColorFail}"
             errorOut "${osResult}"
             overallHealth+="${humanReadableCheckName}; "
         fi
 
     fi
+
+    dialogUpdate "icon: SF=pencil.and.list.clipboard,weight=semibold,colour=${footerStatusColor}"
+    sleep $((anticipationDuration / 2))
 
 }
 
@@ -4551,6 +4559,7 @@ function resolvePaddedEnforcementDateForCandidate() {
 function checkAvailableSoftwareUpdates() {
 
     local humanReadableCheckName="Available Software Updates"
+    local footerStatusColor="${statusColorSuccess}"
     notice "Check ${humanReadableCheckName} …"
 
     dialogUpdate "icon: SF=arrow.trianglehead.2.clockwise,${organizationColorScheme}"
@@ -4603,23 +4612,27 @@ function checkAvailableSoftwareUpdates() {
                 dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorFail}, iconalpha: 1, subtitle: System Settings > General > Software Update, status: fail, statustext: ${availableSoftwareUpdates}"
                 errorOut "${humanReadableCheckName}: ${availableSoftwareUpdates}"
                 overallHealth+="${humanReadableCheckName}; "
+                footerStatusColor="${statusColorFail}"
                 ;;
             *"The operation couldn’t be completed."* )
                 availableSoftwareUpdates="The operation couldn’t be completed."
                 dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorFail}, iconalpha: 1, subtitle: System Settings > General > Software Update, status: fail, statustext: ${availableSoftwareUpdates}"
                 errorOut "${humanReadableCheckName}: ${availableSoftwareUpdates}"
                 overallHealth+="${humanReadableCheckName}; "
+                footerStatusColor="${statusColorFail}"
                 ;;
             *"Deferred: YES"* )
                 availableSoftwareUpdates="Deferred software available."
                 checkStagedUpdate
                 dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorError}, iconalpha: 1, subtitle: System Settings > General > Software Update; ${stagingMessage}, status: error, statustext: ${availableSoftwareUpdates}"
                 warning "${humanReadableCheckName}: ${availableSoftwareUpdates}"
+                footerStatusColor="${statusColorError}"
                 ;;
             *"No new software available."* )
                 availableSoftwareUpdates="No new software available."
-                dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.6, subtitle: Thanks for keeping your Mac up-to-date, status: success, statustext: ${availableSoftwareUpdates}"
+                dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: Thanks for keeping your Mac up-to-date, status: success, statustext: ${availableSoftwareUpdates}"
                 info "${humanReadableCheckName}: ${availableSoftwareUpdates}"
+                footerStatusColor="${statusColorSuccess}"
                 ;;
             * )
                 SUList=$( echo "${SUListRaw}" | grep "*" | sed "s/\* Label: //g" | sed "s/,*$//g" )
@@ -4627,6 +4640,7 @@ function checkAvailableSoftwareUpdates() {
                 checkStagedUpdate
                 dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorError}, iconalpha: 1, subtitle: System Settings > General > Software Update; ${stagingMessage}, status: error, statustext: ${availableSoftwareUpdates}"
                 warning "${humanReadableCheckName}: ${availableSoftwareUpdates}"
+                footerStatusColor="${statusColorError}"
                 ;;
         esac
 
@@ -4635,24 +4649,31 @@ function checkAvailableSoftwareUpdates() {
         # Treat a DDM-enforced OS Updates which contains the current OS as if there are no updates
         if [[ -z "$ddmEnforcedInstallDate" ]]; then
             availableSoftwareUpdates="None"
-            dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.6, subtitle: Thanks for keeping your Mac up-to-date, status: success, statustext: ${availableSoftwareUpdates}"
+            dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: Thanks for keeping your Mac up-to-date, status: success, statustext: ${availableSoftwareUpdates}"
             info "${humanReadableCheckName}: ${availableSoftwareUpdates}"
+            footerStatusColor="${statusColorSuccess}"
         elif [[ -n "${ddmBuildVersionString}" && "${ddmBuildVersionString}" != "(null)" && "${osBuild}" == "${ddmBuildVersionString}" ]]; then
             availableSoftwareUpdates="Up-to-date"
-            dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.6, subtitle: Thanks for keeping your Mac up-to-date, status: success, statustext: ${availableSoftwareUpdates}"
+            dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: Thanks for keeping your Mac up-to-date, status: success, statustext: ${availableSoftwareUpdates}"
             info "${humanReadableCheckName}: ${availableSoftwareUpdates} (build match)"
+            footerStatusColor="${statusColorSuccess}"
         elif is-at-least "${ddmVersionString}" "${osVersion}"; then
             availableSoftwareUpdates="Up-to-date"
-            dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.6, subtitle: Thanks for keeping your Mac up-to-date, status: success, statustext: ${availableSoftwareUpdates}"
+            dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: Thanks for keeping your Mac up-to-date, status: success, statustext: ${availableSoftwareUpdates}"
             info "${humanReadableCheckName}: ${availableSoftwareUpdates}"
+            footerStatusColor="${statusColorSuccess}"
         else
             availableSoftwareUpdates="macOS ${ddmVersionString} (${ddmEnforcedInstallDateHumanReadable})"
             checkStagedUpdate
             dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorError}, iconalpha: 1, subtitle: System Settings > General > Software Update; ${stagingMessage}, status: error, statustext: ${availableSoftwareUpdates}"
             info "${humanReadableCheckName}: ${availableSoftwareUpdates}"
+            footerStatusColor="${statusColorError}"
         fi
 
     fi
+
+    dialogUpdate "icon: SF=arrow.trianglehead.2.clockwise,weight=semibold,colour=${footerStatusColor}"
+    sleep $((anticipationDuration / 2))
 
 }
 
@@ -4665,6 +4686,7 @@ function checkAvailableSoftwareUpdates() {
 function checkAppAutoPatch() {
 
     local humanReadableCheckName="App Auto-Patch last run"
+    local footerStatusColor="${statusColorSuccess}"
     notice "Checking ${humanReadableCheckName} …"
 
     dialogUpdate "icon: SF=arrow.triangle.2.circlepath.circle,${organizationColorScheme}"
@@ -4680,24 +4702,28 @@ function checkAppAutoPatch() {
 
     # Path to App Auto-Patch log
     local aap_log_path="/Library/Management/AppAutoPatch/logs/aap.log"
+    local canEvaluateLastRun="true"
 
     # Check if log file exists
     if [[ ! -f "${aap_log_path}" ]]; then
         errorOut "${humanReadableCheckName}: Log file not found"
         dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorFail}, iconalpha: 1, subtitle: Please run App Auto-Patch from the ${organizationSelfServiceMarketingName}, status: fail, statustext: Log not found"
         overallHealth+="${humanReadableCheckName}; "
-        return
+        footerStatusColor="${statusColorFail}"
+        canEvaluateLastRun="false"
     fi
 
     # Preferred: pull the last machine timestamp from the log (YYYYMMDDHHMMSS)
     local aap_ts_line aap_ts last_run_epoch now_epoch seconds_since_last_run days_since_last_run
 
-    aap_ts_line=$(grep -E "Current time stamp:" "${aap_log_path}" | tail -1)
+    if [[ "${canEvaluateLastRun}" == "true" ]]; then
+        aap_ts_line=$(grep -E "Current time stamp:" "${aap_log_path}" | tail -1)
+    fi
 
-    if [[ -z "${aap_ts_line}" ]]; then
+    if [[ "${canEvaluateLastRun}" == "true" && -z "${aap_ts_line}" ]]; then
         # Fallback: use log mtime if the timestamp line is missing
         last_run_epoch=$(stat -f %m "${aap_log_path}" 2>/dev/null)
-    else
+    elif [[ "${canEvaluateLastRun}" == "true" ]]; then
         aap_ts=$(echo "${aap_ts_line}" | awk '{print $NF}')
 
         # Validate expected format (14 digits)
@@ -4705,48 +4731,59 @@ function checkAppAutoPatch() {
             errorOut "${humanReadableCheckName}: Unable to parse AAP timestamp"
             dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorFail}, iconalpha: 1, subtitle: Please run App Auto-Patch from the ${organizationSelfServiceMarketingName}, status: fail, statustext: Invalid timestamp format"
             overallHealth+="${humanReadableCheckName}; "
-            return
-        fi
+            footerStatusColor="${statusColorFail}"
+            canEvaluateLastRun="false"
+        else
 
-        # Convert YYYYMMDDHHMMSS -> epoch seconds (macOS date)
-        last_run_epoch=$(date -j -f "%Y%m%d%H%M%S" "${aap_ts}" "+%s" 2>/dev/null)
+            # Convert YYYYMMDDHHMMSS -> epoch seconds (macOS date)
+            last_run_epoch=$(date -j -f "%Y%m%d%H%M%S" "${aap_ts}" "+%s" 2>/dev/null)
+        fi
     fi
 
-    if [[ -z "${last_run_epoch}" || ! "${last_run_epoch}" =~ ^[0-9]+$ ]]; then
+    if [[ "${canEvaluateLastRun}" == "true" && ( -z "${last_run_epoch}" || ! "${last_run_epoch}" =~ ^[0-9]+$ ) ]]; then
         errorOut "${humanReadableCheckName}: Unable to determine last run time"
         dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorFail}, iconalpha: 1, subtitle: Please run App Auto-Patch from the ${organizationSelfServiceMarketingName}, status: fail, statustext: Unable to determine last run"
         overallHealth+="${humanReadableCheckName}; "
-        return
+        footerStatusColor="${statusColorFail}"
+        canEvaluateLastRun="false"
     fi
 
-    now_epoch=$(date "+%s")
-    seconds_since_last_run=$(( now_epoch - last_run_epoch ))
+    if [[ "${canEvaluateLastRun}" == "true" ]]; then
+        now_epoch=$(date "+%s")
+        seconds_since_last_run=$(( now_epoch - last_run_epoch ))
 
-    # Guard against clock issues
-    if (( seconds_since_last_run < 0 )); then seconds_since_last_run=0; fi
+        # Guard against clock issues
+        if (( seconds_since_last_run < 0 )); then seconds_since_last_run=0; fi
 
-    days_since_last_run=$(( seconds_since_last_run / 86400 ))
+        days_since_last_run=$(( seconds_since_last_run / 86400 ))
 
-    # Display string (avoid "0 day(s) ago")
-    local days_since_last_run_display
-    if (( days_since_last_run == 0 )); then
-        days_since_last_run_display="Today"
-    else
-        days_since_last_run_display="${days_since_last_run} day(s) ago"
+        # Display string (avoid "0 day(s) ago")
+        local days_since_last_run_display
+        if (( days_since_last_run == 0 )); then
+            days_since_last_run_display="Today"
+        else
+            days_since_last_run_display="${days_since_last_run} day(s) ago"
+        fi
+
+        # Set status based on days since last run
+        if (( days_since_last_run >= aap_critical_threshold )); then
+            errorOut "${humanReadableCheckName}: ${days_since_last_run_display} (exceeds critical threshold of ${aap_critical_threshold} days)"
+            dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorFail}, iconalpha: 1, subtitle: Please run App Auto-Patch from the ${organizationSelfServiceMarketingName}, status: fail, statustext: ${days_since_last_run_display}"
+            overallHealth+="${humanReadableCheckName}; "
+            footerStatusColor="${statusColorFail}"
+        elif (( days_since_last_run >= aap_warning_threshold )); then
+            warning "${humanReadableCheckName}: ${days_since_last_run_display} (exceeds warning threshold of ${aap_warning_threshold} days)"
+            dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorError}, iconalpha: 1, subtitle: Please run App Auto-Patch from the ${organizationSelfServiceMarketingName}, status: error, statustext: ${days_since_last_run_display}"
+            footerStatusColor="${statusColorError}"
+        else
+            info "${humanReadableCheckName}: ${days_since_last_run_display}"
+            dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: You can run App Auto-Patch at any time from the ${organizationSelfServiceMarketingName}, status: success, statustext: ${days_since_last_run_display}"
+            footerStatusColor="${statusColorSuccess}"
+        fi
     fi
 
-    # Set status based on days since last run
-    if (( days_since_last_run >= aap_critical_threshold )); then
-        errorOut "${humanReadableCheckName}: ${days_since_last_run_display} (exceeds critical threshold of ${aap_critical_threshold} days)"
-        dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorFail}, iconalpha: 1, subtitle: Please run App Auto-Patch from the ${organizationSelfServiceMarketingName}, status: fail, statustext: ${days_since_last_run_display}"
-        overallHealth+="${humanReadableCheckName}; "
-    elif (( days_since_last_run >= aap_warning_threshold )); then
-        warning "${humanReadableCheckName}: ${days_since_last_run_display} (exceeds warning threshold of ${aap_warning_threshold} days)"
-        dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorError}, iconalpha: 1, subtitle: Please run App Auto-Patch from the ${organizationSelfServiceMarketingName}, status: error, statustext: ${days_since_last_run_display}"
-    else
-        info "${humanReadableCheckName}: ${days_since_last_run_display}"
-        dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.6, subtitle: You can run App Auto-Patch at any time from the ${organizationSelfServiceMarketingName}, status: success, statustext: ${days_since_last_run_display}"
-    fi
+    dialogUpdate "icon: SF=arrow.triangle.2.circlepath.circle,weight=semibold,colour=${footerStatusColor}"
+    sleep $((anticipationDuration / 2))
 
 }
 
@@ -4759,6 +4796,7 @@ function checkAppAutoPatch() {
 function checkSIP() {
 
     local humanReadableCheckName="System Integrity Protection"
+    local footerStatusColor="${statusColorSuccess}"
     notice "Check ${humanReadableCheckName} …"
 
     dialogUpdate "icon: SF=checkmark.shield.fill,${organizationColorScheme}"
@@ -4773,17 +4811,22 @@ function checkSIP() {
     case ${bootPoliciesSipStatus} in
 
         "Enabled" ) 
-            dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.6, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: Enabled"
+            dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: Enabled"
+            footerStatusColor="${statusColorSuccess}"
             info "${humanReadableCheckName}: Enabled"
             ;;
 
         * )
             dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorFail}, iconalpha: 1, subtitle: Please contact ${supportTeamName}, status: fail, statustext: Failed"
+            footerStatusColor="${statusColorFail}"
             errorOut "${humanReadableCheckName} (${1})"
             overallHealth+="${humanReadableCheckName}; "
             ;;
 
     esac
+
+    dialogUpdate "icon: SF=checkmark.shield.fill,weight=semibold,colour=${footerStatusColor}"
+    sleep $((anticipationDuration / 2))
 
 }
 
@@ -4796,6 +4839,7 @@ function checkSIP() {
 function checkSSV() {
 
     local humanReadableCheckName="Signed System Volume"
+    local footerStatusColor="${statusColorSuccess}"
     notice "Check ${humanReadableCheckName} …"
 
     dialogUpdate "icon: SF=lock.shield,${organizationColorScheme}"
@@ -4810,17 +4854,22 @@ function checkSSV() {
     case ${bootPoliciesSsvStatus} in
 
         "Enabled" ) 
-            dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.6, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: Enabled"
+            dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: Enabled"
+            footerStatusColor="${statusColorSuccess}"
             info "${humanReadableCheckName}: Enabled"
             ;;
 
         * )
             dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorFail}, iconalpha: 1, subtitle: Please contact ${supportTeamName}, status: fail, statustext: Failed"
+            footerStatusColor="${statusColorFail}"
             errorOut "${humanReadableCheckName} (${1})"
             overallHealth+="${humanReadableCheckName}; "
             ;;
 
     esac
+
+    dialogUpdate "icon: SF=lock.shield,weight=semibold,colour=${footerStatusColor}"
+    sleep $((anticipationDuration / 2))
 
 }
 
@@ -4833,6 +4882,7 @@ function checkSSV() {
 function checkGatekeeperXProtect() {
 
     local humanReadableCheckName="Gatekeeper / XProtect"
+    local footerStatusColor="${statusColorSuccess}"
     notice "Check ${humanReadableCheckName} …"
 
     dialogUpdate "icon: SF=bolt.shield.fill,${organizationColorScheme}"
@@ -4847,17 +4897,22 @@ function checkGatekeeperXProtect() {
     case ${gatekeeperXProtectCheck} in
 
         *"enabled"* ) 
-            dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.6, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: Enabled"
+            dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: Enabled"
+            footerStatusColor="${statusColorSuccess}"
             info "${humanReadableCheckName}: Enabled"
             ;;
 
         * )
             dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorFail}, iconalpha: 1, subtitle: Please contact ${supportTeamName}, status: fail, statustext: Failed"
+            footerStatusColor="${statusColorFail}"
             errorOut "${humanReadableCheckName} (${1})"
             overallHealth+="${humanReadableCheckName}; "
             ;;
 
     esac
+
+    dialogUpdate "icon: SF=bolt.shield.fill,weight=semibold,colour=${footerStatusColor}"
+    sleep $((anticipationDuration / 2))
 
 }
 
@@ -4870,6 +4925,7 @@ function checkGatekeeperXProtect() {
 function checkFirewall() {
 
     local humanReadableCheckName="Firewall"
+    local footerStatusColor="${statusColorSuccess}"
     notice "Check ${humanReadableCheckName} …"
 
     dialogUpdate "icon: SF=firewall.fill,${organizationColorScheme}"
@@ -4888,17 +4944,22 @@ function checkFirewall() {
     case ${firewallCheck} in
 
         *"enabled"* | *"Enabled"* | *"is blocking"* ) 
-            dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.6, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: Enabled"
+            dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: Enabled"
+            footerStatusColor="${statusColorSuccess}"
             info "${humanReadableCheckName}: Enabled"
             ;;
 
         * )
             dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorFail}, iconalpha: 1, subtitle: Please contact ${supportTeamName}, status: fail, statustext: Failed"
+            footerStatusColor="${statusColorFail}"
             errorOut "${humanReadableCheckName}: Failed"
             overallHealth+="${humanReadableCheckName}; "
             ;;
 
     esac
+
+    dialogUpdate "icon: SF=firewall.fill,weight=semibold,colour=${footerStatusColor}"
+    sleep $((anticipationDuration / 2))
 
 }
 
@@ -4911,6 +4972,7 @@ function checkFirewall() {
 function checkUptime() {
 
     local humanReadableCheckName="Uptime"
+    local footerStatusColor="${statusColorSuccess}"
     notice "Check ${humanReadableCheckName} …"
 
     dialogUpdate "icon: SF=stopwatch,${organizationColorScheme}"
@@ -4947,11 +5009,13 @@ function checkUptime() {
 
             "warning" ) 
                 dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorError}, iconalpha: 1, subtitle: Please restart your Mac regularly, status: error, statustext: ${uptimeHumanReadable}"
+                footerStatusColor="${statusColorError}"
                 warning "${humanReadableCheckName}: ${uptimeHumanReadable}"
                 ;;
 
             "error" | * )
                 dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorFail}, iconalpha: 1, subtitle: Please restart your Mac regularly, status: fail, statustext: ${uptimeHumanReadable}"
+                footerStatusColor="${statusColorFail}"
                 errorOut "${humanReadableCheckName}: ${uptimeHumanReadable}"
                 overallHealth+="${humanReadableCheckName}; "
                 ;;
@@ -4960,10 +5024,14 @@ function checkUptime() {
     
     else
     
-        dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.6, subtitle: Thanks for restarting your Mac regularly, status: success, statustext: ${uptimeHumanReadable}"
+        dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: Thanks for restarting your Mac regularly, status: success, statustext: ${uptimeHumanReadable}"
+        footerStatusColor="${statusColorSuccess}"
         info "${humanReadableCheckName}: ${uptimeHumanReadable}"
     
     fi
+
+    dialogUpdate "icon: SF=stopwatch,weight=semibold,colour=${footerStatusColor}"
+    sleep $((anticipationDuration / 2))
 
 }
 
@@ -4976,6 +5044,7 @@ function checkUptime() {
 function checkFreeDiskSpace() {
 
     local humanReadableCheckName="Free Disk Space"
+    local footerStatusColor="${statusColorSuccess}"
     local diskRawValues=""
     local diskutilInfo=""
     local freeSpace=""
@@ -4983,6 +5052,7 @@ function checkFreeDiskSpace() {
     local freeBytes=""
     local freePercentage=""
     local diskSpace=""
+    local canEvaluateDiskSpace="true"
     notice "Check ${humanReadableCheckName} …"
 
     dialogUpdate "icon: SF=externaldrive.fill.badge.checkmark,${organizationColorScheme}"
@@ -5018,26 +5088,34 @@ function checkFreeDiskSpace() {
             warning "Invalid disk space data: diskBytes=${diskBytes}, freeBytes=${freeBytes}"
             dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorError}, iconalpha: 1, subtitle: Please contact ${supportTeamName}, status: error, statustext: Unable to determine"
             warning "${humanReadableCheckName}: Unable to determine"
-            return
+            footerStatusColor="${statusColorError}"
+            canEvaluateDiskSpace="false"
 
         fi
 
     fi
 
-    diskSpace="${freeSpace} free (${freePercentage}% available)"
+    if [[ "${canEvaluateDiskSpace}" == "true" ]]; then
+        diskSpace="${freeSpace} free (${freePercentage}% available)"
 
-    if (( $( echo "${freePercentage} < ${allowedMinimumFreeDiskPercentage}" | bc -l ) )); then
+        if (( $( echo "${freePercentage} < ${allowedMinimumFreeDiskPercentage}" | bc -l ) )); then
 
-        dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorFail}, iconalpha: 1, subtitle: See KB0080685 Disk Usage to help identify the 50 largest directories, status: fail, statustext: ${diskSpace}"
-        errorOut "${humanReadableCheckName}: ${diskSpace}"
-        overallHealth+="${humanReadableCheckName}; "
+            dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorFail}, iconalpha: 1, subtitle: See KB0080685 Disk Usage to help identify the 50 largest directories, status: fail, statustext: ${diskSpace}"
+            footerStatusColor="${statusColorFail}"
+            errorOut "${humanReadableCheckName}: ${diskSpace}"
+            overallHealth+="${humanReadableCheckName}; "
 
-    else
+        else
 
-        dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.6, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: ${diskSpace}"
-        info "${humanReadableCheckName}: ${diskSpace}"
+            dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: ${diskSpace}"
+            footerStatusColor="${statusColorSuccess}"
+            info "${humanReadableCheckName}: ${diskSpace}"
 
+        fi
     fi
+
+    dialogUpdate "icon: SF=externaldrive.fill.badge.checkmark,weight=semibold,colour=${footerStatusColor}"
+    sleep $((anticipationDuration / 2))
 
 }
 
@@ -5051,6 +5129,7 @@ function checkUserDirectorySizeItems() {
 
     local targetDirectory="${loggedInUserHomeDirectory}/${2}"
     local humanReadableCheckName="${4}"
+    local footerStatusColor="${statusColorSuccess}"
     notice "Check ${humanReadableCheckName} directory size and item count …"
 
     dialogUpdate "icon: SF=${3},${organizationColorScheme}"
@@ -5065,7 +5144,8 @@ function checkUserDirectorySizeItems() {
 
     if [[ "${userDirectoryItems}" == "0" ]]; then
         userDirectoryResult="Empty"
-        dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.6, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: ${userDirectoryResult}"
+        dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: ${userDirectoryResult}"
+        footerStatusColor="${statusColorSuccess}"
         info "${humanReadableCheckName}: ${userDirectoryResult}"
     else
         dirBlocks=$( du -s "${targetDirectory}" 2>/dev/null | awk '{print $1}' )
@@ -5074,13 +5154,18 @@ function checkUserDirectorySizeItems() {
         userDirectoryResult="${userDirectorySize} (${userDirectoryItems} items) — ${percentage}% of disk"
         if (( $( echo ${percentage}'>'${allowedMaximumDirectoryPercentage} | bc -l 2>/dev/null ) )); then
             dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorError}, iconalpha: 1, subtitle: Please contact ${supportTeamName} if you need assistance, status: error, statustext: ${userDirectoryResult}"
+            footerStatusColor="${statusColorError}"
             warning "${humanReadableCheckName}: ${userDirectoryResult}"
             # overallHealth+="${humanReadableCheckName}; " # Uncomment to treat as an error
         else
-            dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.6, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: ${userDirectoryResult}"
+            dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: ${userDirectoryResult}"
+            footerStatusColor="${statusColorSuccess}"
             info "${humanReadableCheckName}: ${userDirectoryResult}"
         fi
     fi
+
+    dialogUpdate "icon: SF=${3},weight=semibold,colour=${footerStatusColor}"
+    sleep $((anticipationDuration / 2))
 
 }
 
@@ -5092,6 +5177,7 @@ function checkUserDirectorySizeItems() {
 
 function checkMdmProfile() {
     local humanReadableCheckName="${mdmVendor} MDM Profile"
+    local footerStatusColor="${statusColorSuccess}"
     notice "Check ${humanReadableCheckName} …"
     dialogUpdate "icon: SF=gear.badge,${organizationColorScheme}"
     dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill $(echo "${organizationColorScheme}" | tr ',' ' '), iconalpha: 1, status: wait, statustext: Checking …"
@@ -5111,15 +5197,20 @@ function checkMdmProfile() {
     fi
     
     if [[ -n "${mdmProfileTest}" ]]; then
-        dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.6, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: Installed"
+        dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: Installed"
+        footerStatusColor="${statusColorSuccess}"
         info "${humanReadableCheckName}: Installed"
     else
         dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorFail}, iconalpha: 1, status: fail, statustext: NOT Installed"
+        footerStatusColor="${statusColorFail}"
         errorOut "${humanReadableCheckName} (${1})"
         overallHealth+="${humanReadableCheckName}; "
         errorOut "Execute the following command to determine the profileIdentifier of the MDM Profile:"
         errorOut "sudo profiles show enrollment | grep 'profileIdentifier:'"
     fi
+
+    dialogUpdate "icon: SF=gear.badge,weight=semibold,colour=${footerStatusColor}"
+    sleep $((anticipationDuration / 2))
 }
 
 
@@ -5131,6 +5222,7 @@ function checkMdmProfile() {
 function checkAPNs() {
 
     local humanReadableCheckName="Apple Push Notification service"
+    local footerStatusColor="${statusColorSuccess}"
     notice "Check ${humanReadableCheckName} …"
 
     dialogUpdate "icon: SF=wave.3.up.circle,${organizationColorScheme}"
@@ -5145,6 +5237,7 @@ function checkAPNs() {
     if [[ "${apnsCheck}" == *"Timestamp"* ]] || [[ -z "${apnsCheck}" ]]; then
 
         dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorFail}, iconalpha: 1, subtitle: Please contact ${supportTeamName}, status: fail, statustext: Failed"
+        footerStatusColor="${statusColorFail}"
         errorOut "${humanReadableCheckName} (${1}): ${apnsCheck}"
         overallHealth+="${humanReadableCheckName}; "
 
@@ -5158,10 +5251,14 @@ function checkAPNs() {
         else
             apnsStatus=$( date -r "${apnsStatusEpoch}" "+%A %-l:%M %p" )
         fi
-        dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.6, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: ${apnsStatus}"
+        dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: ${apnsStatus}"
+        footerStatusColor="${statusColorSuccess}"
         info "${humanReadableCheckName}: ${apnsCheck}"
 
     fi
+
+    dialogUpdate "icon: SF=wave.3.up.circle,weight=semibold,colour=${footerStatusColor}"
+    sleep $((anticipationDuration / 2))
 
 }
 
@@ -5316,6 +5413,7 @@ function checkNetworkHosts() {
     local name="$2"
     shift 2
     local hosts=("$@")
+    local footerStatusColor="${statusColorSuccess}"
 
     notice "Check ${name} …"
     dialogUpdate "icon: SF=network,${organizationColorScheme}"
@@ -5367,13 +5465,18 @@ function checkNetworkHosts() {
     done
 
     if [[ "${allOK}" == true ]]; then
-        dialogUpdate "listitem: index: ${index}, icon: SF=$(printf "%02d" $(($index+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.6, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: Passed"
+        dialogUpdate "listitem: index: ${index}, icon: SF=$(printf "%02d" $(($index+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: Passed"
+        footerStatusColor="${statusColorSuccess}"
         info "${name}: ${results%;; }"
     else
         dialogUpdate "listitem: index: ${index}, icon: SF=$(printf "%02d" $(($index+1))).circle.fill weight=bold colour=${statusColorFail}, iconalpha: 1, status: fail, statustext: Failed"
+        footerStatusColor="${statusColorFail}"
         errorOut "${name}: ${results%;; }"
         overallHealth+="${name}; "
     fi
+
+    dialogUpdate "icon: SF=network,weight=semibold,colour=${footerStatusColor}"
+    sleep $((anticipationDuration / 2))
 
 }
 
@@ -5384,6 +5487,9 @@ function checkNetworkHosts() {
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 function checkMdmCertificateExpiration() {
+
+    local certificateName=""
+    local footerStatusColor="${statusColorSuccess}"
 
     case "${mdmVendor}" in
         "Addigy" )
@@ -5411,7 +5517,6 @@ function checkMdmCertificateExpiration() {
             certificateName="MOSYLE CORPORATION"
             ;;
         * )
-            return
             ;;
     esac
 
@@ -5425,29 +5530,36 @@ function checkMdmCertificateExpiration() {
 
     sleep "${anticipationDuration}"
 
-    expiry=$(security find-certificate -c "${certificateName}" -p /Library/Keychains/System.keychain 2>/dev/null | \
-             openssl x509 -noout -enddate | cut -d= -f2)
+    if [[ -n "${certificateName}" ]]; then
+        expiry=$(security find-certificate -c "${certificateName}" -p /Library/Keychains/System.keychain 2>/dev/null | \
+                 openssl x509 -noout -enddate | cut -d= -f2)
 
-    if [[ -z "$expiry" ]]; then
-        expirationDateFormatted="NOT Installed"
-        dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorFail}, iconalpha: 1, status: fail, statustext: ${expirationDateFormatted}"
-        errorOut "${humanReadableCheckName} Expiration: ${expirationDateFormatted}"
-        overallHealth+="${humanReadableCheckName}; "
-        return
+        if [[ -z "$expiry" ]]; then
+            expirationDateFormatted="NOT Installed"
+            dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorFail}, iconalpha: 1, status: fail, statustext: ${expirationDateFormatted}"
+            footerStatusColor="${statusColorFail}"
+            errorOut "${humanReadableCheckName} Expiration: ${expirationDateFormatted}"
+            overallHealth+="${humanReadableCheckName}; "
+        else
+            now_seconds=$(date +%s)
+            date_seconds=$(date -j -f "%b %d %T %Y %Z" "$expiry" +%s)
+            expirationDateFormatted=$(date -j -f "%b %d %H:%M:%S %Y GMT" "$expiry" "+%d-%b-%Y")
+
+            if (( date_seconds > now_seconds )); then
+                dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: ${expirationDateFormatted}"
+                footerStatusColor="${statusColorSuccess}"
+                info "${humanReadableCheckName} Expiration: ${expirationDateFormatted}"
+            else
+                dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorFail}, iconalpha: 1, status: fail, statustext: ${expirationDateFormatted}"
+                footerStatusColor="${statusColorFail}"
+                errorOut "${humanReadableCheckName} Expiration: ${expirationDateFormatted}"
+                overallHealth+="${humanReadableCheckName}; "
+            fi
+        fi
     fi
 
-    now_seconds=$(date +%s)
-    date_seconds=$(date -j -f "%b %d %T %Y %Z" "$expiry" +%s)
-    expirationDateFormatted=$(date -j -f "%b %d %H:%M:%S %Y GMT" "$expiry" "+%d-%b-%Y")
-
-    if (( date_seconds > now_seconds )); then
-        dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.6, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: ${expirationDateFormatted}"
-        info "${humanReadableCheckName} Expiration: ${expirationDateFormatted}"
-    else
-        dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorFail}, iconalpha: 1, status: fail, statustext: ${expirationDateFormatted}"
-        errorOut "${humanReadableCheckName} Expiration: ${expirationDateFormatted}"
-        overallHealth+="${humanReadableCheckName}; "
-    fi
+    dialogUpdate "icon: SF=mail.and.text.magnifyingglass,weight=semibold,colour=${footerStatusColor}"
+    sleep $((anticipationDuration / 2))
 }
 
 
@@ -5459,6 +5571,8 @@ function checkMdmCertificateExpiration() {
 function checkJamfProCheckIn() {
 
     local humanReadableCheckName="Last Jamf Pro check-in"
+    local footerCheckIcon="SF=dot.radiowaves.left.and.right"
+    local footerStatusColor="${statusColorSuccess}"
     notice "Checking ${humanReadableCheckName} …"
 
     dialogUpdate "icon: SF=dot.radiowaves.left.and.right,${organizationColorScheme}"
@@ -5496,16 +5610,21 @@ function checkJamfProCheckIn() {
         dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorFail}, iconalpha: 1, status: fail, statustext: ${last_check_in_time_human_readable}"
         errorOut "${humanReadableCheckName}: ${last_check_in_time_human_readable}"
         overallHealth+="${humanReadableCheckName}; "
+        footerStatusColor="${statusColorFail}"
     elif [ ${time_since_check_in_epoch} -ge ${check_in_time_aging} ]; then
         # check_in_status_indicator="🟠"
         dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorError}, iconalpha: 1, status: error, statustext: ${last_check_in_time_human_readable}"
         warning "${humanReadableCheckName}: ${last_check_in_time_human_readable}"
         overallHealth+="${humanReadableCheckName}; "
+        footerStatusColor="${statusColorError}"
     elif [ ${time_since_check_in_epoch} -lt ${check_in_time_aging} ]; then
         # check_in_status_indicator="🟢"
-        dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.6, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: ${last_check_in_time_human_readable}"
+        dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: ${last_check_in_time_human_readable}"
         info "${humanReadableCheckName}: ${last_check_in_time_human_readable}"
     fi
+
+    dialogUpdate "icon: ${footerCheckIcon},weight=semibold,colour=${footerStatusColor}"
+    sleep $((anticipationDuration / 2))
 
 }
 
@@ -5518,6 +5637,8 @@ function checkJamfProCheckIn() {
 function checkJamfProInventory() {
 
     local humanReadableCheckName="Last Jamf Pro inventory update"
+    local footerCheckIcon="SF=checklist"
+    local footerStatusColor="${statusColorSuccess}"
     notice "Check ${humanReadableCheckName} …"
 
     dialogUpdate "icon: SF=checklist,${organizationColorScheme}"
@@ -5556,16 +5677,21 @@ function checkJamfProInventory() {
         dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorFail}, iconalpha: 1, status: fail, statustext: ${last_inventory_time_human_readable}"
         errorOut "${humanReadableCheckName}: ${last_inventory_time_human_readable}"
         overallHealth+="${humanReadableCheckName}; "
+        footerStatusColor="${statusColorFail}"
     elif [ ${time_since_inventory_epoch} -ge ${inventory_time_aging} ]; then
         # inventory_status_indicator="🟠"
         dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorError}, iconalpha: 1, status: error, statustext: ${last_inventory_time_human_readable}"
         warning "${humanReadableCheckName}: ${last_inventory_time_human_readable}"
         overallHealth+="${humanReadableCheckName}; "
+        footerStatusColor="${statusColorError}"
     elif [ ${time_since_inventory_epoch} -lt ${inventory_time_aging} ]; then
         # inventory_status_indicator="🟢"
-        dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.6, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: ${last_inventory_time_human_readable}"
+        dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: ${last_inventory_time_human_readable}"
         info "${humanReadableCheckName}: ${last_inventory_time_human_readable}"
     fi
+
+    dialogUpdate "icon: ${footerCheckIcon},weight=semibold,colour=${footerStatusColor}"
+    sleep $((anticipationDuration / 2))
 
 }
 
@@ -5578,6 +5704,8 @@ function checkJamfProInventory() {
 function checkMosyleCheckIn() {
 
     local humanReadableCheckName="Last Mosyle check-in"
+    local footerCheckIcon="SF=dot.radiowaves.left.and.right"
+    local footerStatusColor="${statusColorSuccess}"
     notice "Checking ${humanReadableCheckName} …"
 
     dialogUpdate "icon: SF=dot.radiowaves.left.and.right,${organizationColorScheme}"
@@ -5613,16 +5741,21 @@ function checkMosyleCheckIn() {
         dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorFail}, iconalpha: 1, status: fail, statustext: ${last_check_in_time_human_readable}"
         errorOut "${humanReadableCheckName}: ${last_check_in_time_human_readable}"
         overallHealth+="${humanReadableCheckName}; "
+        footerStatusColor="${statusColorFail}"
     elif [ ${time_since_check_in_epoch} -ge ${check_in_time_aging} ]; then
         # check_in_status_indicator="🟠"
         dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorError}, iconalpha: 1, status: error, statustext: ${last_check_in_time_human_readable}"
         warning "${humanReadableCheckName}: ${last_check_in_time_human_readable}"
         overallHealth+="${humanReadableCheckName}; "
+        footerStatusColor="${statusColorError}"
     elif [ ${time_since_check_in_epoch} -lt ${check_in_time_aging} ]; then
         # check_in_status_indicator="🟢"
-        dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.6, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: ${last_check_in_time_human_readable}"
+        dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: ${last_check_in_time_human_readable}"
         info "${humanReadableCheckName}: ${last_check_in_time_human_readable}"
     fi
+
+    dialogUpdate "icon: ${footerCheckIcon},weight=semibold,colour=${footerStatusColor}"
+    sleep $((anticipationDuration / 2))
 
 }
 
@@ -5635,6 +5768,8 @@ function checkMosyleCheckIn() {
 function checkFileVault() {
 
     local humanReadableCheckName="FileVault"
+    local footerCheckIcon="SF=lock.laptopcomputer"
+    local footerStatusColor="${statusColorSuccess}"
     notice "Check ${humanReadableCheckName} …"
 
     dialogUpdate "icon: SF=lock.laptopcomputer,${organizationColorScheme}"
@@ -5653,12 +5788,12 @@ function checkFileVault() {
         case ${fileVaultStatus} in
 
             *"FileVault is On."* ) 
-                dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.6, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: Enabled"
+                dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: Enabled"
                 info "${humanReadableCheckName}: Enabled"
                 ;;
 
             *"Deferred enablement appears to be active for user"* )
-                dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.6, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: Enabled (next login)"
+                dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: Enabled (next login)"
                 warning "${humanReadableCheckName}: Enabled (next login)"
                 ;;
 
@@ -5666,6 +5801,7 @@ function checkFileVault() {
                 dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorFail}, iconalpha: 1, status: fail, statustext: Failed"
                 errorOut "${humanReadableCheckName} (${1})"
                 overallHealth+="${humanReadableCheckName}; "
+                footerStatusColor="${statusColorFail}"
                 ;;
 
         esac
@@ -5675,8 +5811,12 @@ function checkFileVault() {
         dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorFail}, iconalpha: 1, status: fail, statustext: Failed"
         errorOut "${humanReadableCheckName} (${1})"
         overallHealth+="${humanReadableCheckName}; "
+        footerStatusColor="${statusColorFail}"
 
     fi
+
+    dialogUpdate "icon: ${footerCheckIcon},weight=semibold,colour=${footerStatusColor}"
+    sleep $((anticipationDuration / 2))
 
 }
 
@@ -5691,6 +5831,8 @@ function checkInternal() {
     checkInternalTargetFile="${2}"
     checkInternalTargetFileIcon="${3}"
     checkInternalTargetFileDisplayName="${4}"
+    local footerCheckIcon="${checkInternalTargetFileIcon}"
+    local footerStatusColor="${statusColorSuccess}"
 
     notice "Internal Check: ${checkInternalTargetFile} …"
 
@@ -5703,7 +5845,7 @@ function checkInternal() {
 
     if [[ -e "${checkInternalTargetFile}" ]]; then
 
-        dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.6, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: Installed"
+        dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: Installed"
         info "${checkInternalTargetFileDisplayName} installed"
         
     else
@@ -5711,10 +5853,14 @@ function checkInternal() {
         dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorFail}, iconalpha: 1, subtitle: Visit the ${organizationSelfServiceMarketingName} to install ${checkInternalTargetFileDisplayName}, status: fail, statustext: NOT Installed"
         errorOut "${checkInternalTargetFileDisplayName} NOT Installed"
         overallHealth+="${checkInternalTargetFileDisplayName}; "
+        footerStatusColor="${statusColorFail}"
 
     fi
 
     sleep "${anticipationDuration}"
+
+    dialogUpdate "icon: ${footerCheckIcon},weight=semibold,colour=${footerStatusColor}"
+    sleep $((anticipationDuration / 2))
 
 }
 
@@ -5727,6 +5873,8 @@ function checkInternal() {
 function checkTouchID() {
 
     local humanReadableCheckName="Touch ID"
+    local footerCheckIcon="SF=touchid"
+    local footerStatusColor="${statusColorSuccess}"
     local bioOutput=""
     local iokitDiagnosticsOutput=""
     local iokitBiometricSensorCount="0"
@@ -5764,6 +5912,7 @@ function checkTouchID() {
 
         dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorError}, iconalpha: 1, status: error, statustext: ${hw}"
         info "Touch ID hardware ${hw:l}"
+        footerStatusColor="${statusColorError}"
 
     else
 
@@ -5798,14 +5947,18 @@ function checkTouchID() {
         fi
 
         if [[ "${enrolled}" == "true" ]]; then
-            dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.6, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: Enrolled"
+            dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: Enrolled"
             info "Touch ID: Enabled & Enrolled (${bioCount} template(s))"
         else
             dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorError}, iconalpha: 1, status: error, statustext: Not enrolled"
             warning "Touch ID: Hardware present, not enrolled"
+            footerStatusColor="${statusColorError}"
         fi
 
     fi
+
+    dialogUpdate "icon: ${footerCheckIcon},weight=semibold,colour=${footerStatusColor}"
+    sleep $((anticipationDuration / 2))
 
 }
 
@@ -5816,6 +5969,9 @@ function checkTouchID() {
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 function checkVPN() {
+
+    local footerCheckIcon="${vpnAppPath}"
+    local footerStatusColor="${statusColorSuccess}"
 
     notice "Check ${vpnAppName} …"
 
@@ -5832,34 +5988,42 @@ function checkVPN() {
             dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorFail}, iconalpha: 1, subtitle: Please contact ${supportTeamName}, status: fail, statustext: Failed"
             errorOut "${vpnAppName} Failed"
             overallHealth+="${vpnAppName}; "
+            footerStatusColor="${statusColorFail}"
             ;;
 
         *"Idle"* )
             dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorError}, iconalpha: 1, status: error, statustext: Idle"
             info "${vpnAppName} idle"
+            footerStatusColor="${statusColorError}"
             ;;
 
         "Connected"* | "${ciscoVPNIP}" )
-            dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.6, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: Connected"
+            dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: Connected"
             info "${vpnAppName} Connected"
             ;;
 
         "Disconnected" )
             dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorError}, iconalpha: 1, status: error, statustext: Disconnected"
             info "${vpnAppName} Disconnected"
+            footerStatusColor="${statusColorError}"
             ;;
 
         "None" )
             dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorError}, iconalpha: 1, status: error, statustext: No VPN"
             info "No VPN"
+            footerStatusColor="${statusColorError}"
             ;;
 
         * )
             dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorError}, iconalpha: 1, status: error, statustext: Unknown"
             info "${vpnAppName} Unknown"
+            footerStatusColor="${statusColorError}"
             ;;
 
     esac
+
+    dialogUpdate "icon: ${footerCheckIcon},weight=semibold,colour=${footerStatusColor}"
+    sleep $((anticipationDuration / 2))
 
 }
 
@@ -5874,6 +6038,8 @@ function checkExternalJamfPro() {
     trigger="${2}"
     appPath="${3}"
     appDisplayName=$(basename "${appPath}" .app)
+    local footerCheckIcon="${appPath}"
+    local footerStatusColor="${statusColorSuccess}"
 
     if [[ -n $( defaults read "${organizationDefaultsDomain}" 2>/dev/null ) ]]; then
         defaults delete "${organizationDefaultsDomain}"
@@ -5903,10 +6069,11 @@ function checkExternalJamfPro() {
                 dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorFail}, iconalpha: 1, status: fail, statustext: $checkStatus"
                 errorOut "${appDisplayName} Failed"
                 overallHealth+="${appDisplayName}; "
+                footerStatusColor="${statusColorFail}"
                 ;;
 
             "success" )
-                dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.6, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: $checkStatus"
+                dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: $checkStatus"
                 info "${appDisplayName} $checkStatus"
                 ;;
 
@@ -5914,6 +6081,7 @@ function checkExternalJamfPro() {
                 dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorError}, iconalpha: 1, status: error, statustext: $checkStatus:$checkExtended"
                 errorOut "${appDisplayName} Error:$checkExtended"
                 overallHealth+="${appDisplayName}; "
+                footerStatusColor="${statusColorError}"
                 ;;
 
         esac
@@ -5927,10 +6095,11 @@ function checkExternalJamfPro() {
                 dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorFail}, iconalpha: 1, subtitle: Please contact ${supportTeamName}, status: fail, statustext: Failed"
                 errorOut "${appDisplayName} Failed"
                 overallHealth+="${appDisplayName}; "
+                footerStatusColor="${statusColorFail}"
                 ;;
 
             *"running"* )
-                dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.6, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: Running"
+                dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: Running"
                 info "${appDisplayName} running"
                 ;;
 
@@ -5938,11 +6107,15 @@ function checkExternalJamfPro() {
                 dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorError}, iconalpha: 1, status: error, statustext: Error"
                 errorOut "${appDisplayName} Error"
                 overallHealth+="${appDisplayName}; "
+                footerStatusColor="${statusColorError}"
                 ;;
 
         esac
 
     fi
+
+    dialogUpdate "icon: ${footerCheckIcon},weight=semibold,colour=${footerStatusColor}"
+    sleep $((anticipationDuration / 2))
 
 }
 
@@ -5955,6 +6128,8 @@ function checkExternalJamfPro() {
 function checkNetworkQuality() {
 
     local humanReadableCheckName="Network Quality"
+    local footerCheckIcon="SF=gauge.with.dots.needle.67percent"
+    local footerStatusColor="${statusColorSuccess}"
     notice "Check ${humanReadableCheckName} …"    
 
     dialogUpdate "icon: SF=gauge.with.dots.needle.67percent,${organizationColorScheme}"
@@ -6012,10 +6187,12 @@ function checkNetworkQuality() {
     esac
 
     mbps=$( echo "scale=2; ( $dlThroughput / 1000000 )" | bc )
-    dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.6, status: success, statustext: ${mbps} Mbps ${testStatus}"
+    dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, status: success, statustext: ${mbps} Mbps ${testStatus}"
     info "Download: ${mbps} Mbps, Responsiveness: ${dlResponsiveness}; "
 
     dialogUpdate "icon: ${icon}"
+    dialogUpdate "icon: ${footerCheckIcon},weight=semibold,colour=${footerStatusColor}"
+    sleep $((anticipationDuration / 2))
 
 }
 
@@ -6028,6 +6205,8 @@ function checkNetworkQuality() {
 function checkHomebrewStatus() {
 
     local humanReadableCheckName="Homebrew Status"
+    local footerCheckIcon="SF=mug.fill"
+    local footerStatusColor="${statusColorSuccess}"
     local brewBinary=""
     local installedHomebrewVersion=""
     local latestHomebrewVersion=""
@@ -6048,49 +6227,53 @@ function checkHomebrewStatus() {
     [[ -z "${brewBinary}" && -x "/usr/local/bin/brew" ]] && brewBinary="/usr/local/bin/brew"
 
     if [[ -z "${brewBinary}" ]]; then
-        dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.6, subtitle: Optional tool not detected on this Mac, status: success, statustext: Not installed"
+        dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: Optional tool not detected on this Mac, status: success, statustext: Not installed"
         info "${humanReadableCheckName}: Not installed"
-        return
-    fi
-
-    installedHomebrewVersion=$( runAsUser env HOMEBREW_NO_AUTO_UPDATE=1 "${brewBinary}" --version 2>/dev/null | awk '/^Homebrew / { print $2; exit }' )
-    latestHomebrewResponse=$( curl -fsL --connect-timeout 5 --max-time 10 "https://api.github.com/repos/Homebrew/brew/releases/latest" 2>/dev/null )
-
-    if [[ -n "${latestHomebrewResponse}" ]]; then
-        latestHomebrewVersion=$( get_json_value "${latestHomebrewResponse}" "tag_name" 2>/dev/null | tr -d '\r' | sed 's/^v//' )
-        [[ "${latestHomebrewVersion}" == "undefined" ]] && latestHomebrewVersion=""
-    fi
-
-    outdatedFormulaeCount=$( runAsUser env HOMEBREW_NO_AUTO_UPDATE=1 "${brewBinary}" outdated --formula --quiet 2>/dev/null | sed '/^$/d' | wc -l | tr -d ' ' )
-    outdatedCasksCount=$( runAsUser env HOMEBREW_NO_AUTO_UPDATE=1 "${brewBinary}" outdated --cask --quiet 2>/dev/null | sed '/^$/d' | wc -l | tr -d ' ' )
-
-    if [[ -z "${installedHomebrewVersion}" ]] || [[ -z "${latestHomebrewVersion}" ]] || [[ "${outdatedFormulaeCount}" != <-> ]] || [[ "${outdatedCasksCount}" != <-> ]]; then
-        dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorError}, iconalpha: 1, subtitle: Homebrew was found but could not be fully evaluated, status: error, statustext: Unable to determine"
-        errorOut "${humanReadableCheckName}: Unable to determine; installed=${installedHomebrewVersion:-unknown}; latest=${latestHomebrewVersion:-unknown}; formulae=${outdatedFormulaeCount:-unknown}; casks=${outdatedCasksCount:-unknown}"
-        overallHealth+="${humanReadableCheckName}; "
-        return
-    fi
-
-    local totalOutdatedCount=$(( outdatedFormulaeCount + outdatedCasksCount ))
-
-    if [[ "${installedHomebrewVersion}" == "${latestHomebrewVersion}" ]] && (( totalOutdatedCount == 0 )); then
-        dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.6, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: ${installedHomebrewVersion} current"
-        info "${humanReadableCheckName}: Installed ${installedHomebrewVersion}; latest ${latestHomebrewVersion}; outdated formulae ${outdatedFormulaeCount}; outdated casks ${outdatedCasksCount}"
     else
-        local statusSummary=""
+        installedHomebrewVersion=$( runAsUser env HOMEBREW_NO_AUTO_UPDATE=1 "${brewBinary}" --version 2>/dev/null | awk '/^Homebrew / { print $2; exit }' )
+        latestHomebrewResponse=$( curl -fsL --connect-timeout 5 --max-time 10 "https://api.github.com/repos/Homebrew/brew/releases/latest" 2>/dev/null )
 
-        if [[ "${installedHomebrewVersion}" != "${latestHomebrewVersion}" ]] && (( totalOutdatedCount > 0 )); then
-            statusSummary="${installedHomebrewVersion} vs ${latestHomebrewVersion}; ${totalOutdatedCount} outdated"
-        elif [[ "${installedHomebrewVersion}" != "${latestHomebrewVersion}" ]]; then
-            statusSummary="${installedHomebrewVersion} vs ${latestHomebrewVersion}"
-        else
-            statusSummary="${totalOutdatedCount} outdated"
+        if [[ -n "${latestHomebrewResponse}" ]]; then
+            latestHomebrewVersion=$( get_json_value "${latestHomebrewResponse}" "tag_name" 2>/dev/null | tr -d '\r' | sed 's/^v//' )
+            [[ "${latestHomebrewVersion}" == "undefined" ]] && latestHomebrewVersion=""
         fi
 
-        dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorError}, iconalpha: 1, subtitle: Open Terminal and update Homebrew packages if you manage them on this Mac, status: error, statustext: ${statusSummary}"
-        errorOut "${humanReadableCheckName}: Installed ${installedHomebrewVersion}; latest ${latestHomebrewVersion}; outdated formulae ${outdatedFormulaeCount}; outdated casks ${outdatedCasksCount}"
-        overallHealth+="${humanReadableCheckName}; "
+        outdatedFormulaeCount=$( runAsUser env HOMEBREW_NO_AUTO_UPDATE=1 "${brewBinary}" outdated --formula --quiet 2>/dev/null | sed '/^$/d' | wc -l | tr -d ' ' )
+        outdatedCasksCount=$( runAsUser env HOMEBREW_NO_AUTO_UPDATE=1 "${brewBinary}" outdated --cask --quiet 2>/dev/null | sed '/^$/d' | wc -l | tr -d ' ' )
+
+        if [[ -z "${installedHomebrewVersion}" ]] || [[ -z "${latestHomebrewVersion}" ]] || [[ "${outdatedFormulaeCount}" != <-> ]] || [[ "${outdatedCasksCount}" != <-> ]]; then
+            dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorError}, iconalpha: 1, subtitle: Homebrew was found but could not be fully evaluated, status: error, statustext: Unable to determine"
+            errorOut "${humanReadableCheckName}: Unable to determine; installed=${installedHomebrewVersion:-unknown}; latest=${latestHomebrewVersion:-unknown}; formulae=${outdatedFormulaeCount:-unknown}; casks=${outdatedCasksCount:-unknown}"
+            overallHealth+="${humanReadableCheckName}; "
+            footerStatusColor="${statusColorError}"
+        else
+
+            local totalOutdatedCount=$(( outdatedFormulaeCount + outdatedCasksCount ))
+
+            if [[ "${installedHomebrewVersion}" == "${latestHomebrewVersion}" ]] && (( totalOutdatedCount == 0 )); then
+                dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: ${installedHomebrewVersion} current"
+                info "${humanReadableCheckName}: Installed ${installedHomebrewVersion}; latest ${latestHomebrewVersion}; outdated formulae ${outdatedFormulaeCount}; outdated casks ${outdatedCasksCount}"
+            else
+                local statusSummary=""
+
+                if [[ "${installedHomebrewVersion}" != "${latestHomebrewVersion}" ]] && (( totalOutdatedCount > 0 )); then
+                    statusSummary="${installedHomebrewVersion} vs ${latestHomebrewVersion}; ${totalOutdatedCount} outdated"
+                elif [[ "${installedHomebrewVersion}" != "${latestHomebrewVersion}" ]]; then
+                    statusSummary="${installedHomebrewVersion} vs ${latestHomebrewVersion}"
+                else
+                    statusSummary="${totalOutdatedCount} outdated"
+                fi
+
+                dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorError}, iconalpha: 1, subtitle: Open Terminal and update Homebrew packages if you manage them on this Mac, status: error, statustext: ${statusSummary}"
+                errorOut "${humanReadableCheckName}: Installed ${installedHomebrewVersion}; latest ${latestHomebrewVersion}; outdated formulae ${outdatedFormulaeCount}; outdated casks ${outdatedCasksCount}"
+                overallHealth+="${humanReadableCheckName}; "
+                footerStatusColor="${statusColorError}"
+            fi
+        fi
     fi
+
+    dialogUpdate "icon: ${footerCheckIcon},weight=semibold,colour=${footerStatusColor}"
+    sleep $((anticipationDuration / 2))
 
 }
 
@@ -6103,6 +6286,8 @@ function checkHomebrewStatus() {
 function checkElectronCornerMask() {
 
     local humanReadableCheckName="Electron Corner Mask"
+    local footerCheckIcon="SF=cpu.fill"
+    local footerStatusColor="${statusColorSuccess}"
     notice "Check ${humanReadableCheckName} …"
 
     dialogUpdate "icon: SF=cpu.fill,${organizationColorScheme}"
@@ -6115,192 +6300,178 @@ function checkElectronCornerMask() {
     local osMajorVersion="${osVersion%%.*}"
     if [[ "${osMajorVersion}" -lt 26 ]]; then
         info "${humanReadableCheckName}: macOS ${osVersion} — not affected."
-        dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.6, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: Not affected (macOS ${osVersion})"
-        return 0
-    fi
-
-    # Electron versions where the bug is fixed
-    local fixedVersions=( "36.9.2" "37.6.0" "38.2.0" "39.0.0-alpha.7" )
-
-    # Known-safe Electron apps and their verified runtime versions
-    declare -A knownSafeElectronApps=(
-        ["Visual Studio Code.app"]="37.6.0"
-        ["Slack.app"]="38.2.0"
-    )
-
-    local foundElectronApps=0
-    local vulnerableApps=()
-    local safeApps=()
-    local -A processedElectronApps=()
-
-    setopt null_glob
-
-    local appSearchRoots=(
-        /Applications
-        /Applications/Utilities
-        /Users/"${loggedInUser}"/Applications
-    )
-    local frameworkPaths=(
-        /Applications/*.app/Contents/Frameworks/Electron\ Framework.framework
-        /Applications/Utilities/*.app/Contents/Frameworks/Electron\ Framework.framework
-        /Users/"${loggedInUser}"/Applications/*.app/Contents/Frameworks/Electron\ Framework.framework
-    )
-    local knownSafeElectronAppNames=(
-        "Visual Studio Code.app"
-        "Slack.app"
-    )
-    local app=""
-    local appName=""
-    local appSearchRoot=""
-    local appVersion=""
-    local frameworkPath=""
-    local versionFile=""
-    local frameworkPlist=""
-    local frameworkResourcesPath=""
-    local frameworkFallbackResourcesPath=""
-    local pkgJson=""
-    local asarPkgJson=""
-    local productJson=""
-    local versionTxt=""
-    local appInfoPlist=""
-    local fixed=""
-    local vulnerable=""
-
-    for appName in "${knownSafeElectronAppNames[@]}"; do
-        appVersion="${knownSafeElectronApps[$appName]}"
-        for appSearchRoot in "${appSearchRoots[@]}"; do
-            app="${appSearchRoot}/${appName}"
-            if [[ -d "${app}" ]]; then
-                ((foundElectronApps++))
-                processedElectronApps["${app}"]=1
-                safeApps+=("${appName} (${appVersion}) [known fixed]")
-            fi
-        done
-    done
-
-    for frameworkPath in "${frameworkPaths[@]}"; do
-        app="${frameworkPath:h:h:h}"
-        [[ ! -d "${app}" ]] && continue
-        if [[ -n "${processedElectronApps[$app]}" ]]; then
-            continue
-        fi
-        processedElectronApps["${app}"]=1
-
-        ((foundElectronApps++))
-        appName="${app:t}"
-        appVersion="Unknown"
-
-        frameworkResourcesPath="${frameworkPath}/Versions/Current/Resources"
-        frameworkFallbackResourcesPath="${frameworkPath}/Versions/A/Resources"
-        versionFile="${frameworkResourcesPath}/version"
-        frameworkPlist="${frameworkResourcesPath}/Info.plist"
-        if [[ ! -f "${versionFile}" ]]; then
-            versionFile="${frameworkFallbackResourcesPath}/version"
-        fi
-        if [[ ! -f "${frameworkPlist}" ]]; then
-            frameworkPlist="${frameworkFallbackResourcesPath}/Info.plist"
-        fi
-        pkgJson="${app}/Contents/Resources/app/package.json"
-        asarPkgJson="${app}/Contents/Resources/app.asar.unpacked/package.json"
-        productJson="${app}/Contents/Resources/app/product.json"
-        versionTxt="${app}/Contents/Resources/app/version.txt"
-        appInfoPlist="${app}/Contents/Info.plist"
-
-        # 1. Canonical Electron version file
-        if [[ -f "${versionFile}" ]]; then
-            appVersion="${$(<"${versionFile}")//$'\n'/}"
-            appVersion="${appVersion//$'\r'/}"
-            appVersion="${appVersion//$'\t'/}"
-
-        # 1a. Framework Info.plist (reliable for runtime version) – prioritize CFBundleVersion (common in Electron frameworks)
-        elif [[ -f "${frameworkPlist}" ]]; then
-            appVersion=$(/usr/bin/plutil -extract CFBundleVersion raw -expect string "${frameworkPlist}" 2>/dev/null)
-            if [[ -z "${appVersion}" ]]; then
-                appVersion=$(/usr/bin/plutil -extract CFBundleShortVersionString raw -expect string "${frameworkPlist}" 2>/dev/null)
-            fi
-
-        # 2. package.json electronVersion
-        elif [[ -f "${pkgJson}" ]]; then
-            appVersion=$(grep -Eo '"electronVersion"[^,]*' "${pkgJson}" | awk -F'"' '{print $4}')
-
-        # 3. asar-unpacked package.json
-        elif [[ -f "${asarPkgJson}" ]]; then
-            appVersion=$(grep -Eo '"electronVersion"[^,]*' "${asarPkgJson}" | awk -F'"' '{print $4}')
-
-        # 4. product.json (VS Code, Figma, Discord, etc.)
-        elif [[ -f "${productJson}" ]]; then
-            appVersion=$(grep -Eo '"version"[^,]*' "${productJson}" | awk -F'"' '{print $4}')
-            if [[ ! "${appVersion}" =~ ^[0-9]+\.[0-9]+ ]]; then
-                local commit=$(grep -Eo '"commit"[^,]*' "${productJson}" | awk -F'"' '{print $4}')
-                [[ -n "${commit}" ]] && appVersion="custom-${commit:0:7}"
-            fi
-
-        # 5. version.txt fallback (Asana, Notion)
-        elif [[ -f "${versionTxt}" ]]; then
-            appVersion="${$(<"${versionTxt}")//$'\n'/}"
-            appVersion="${appVersion//$'\r'/}"
-            appVersion="${appVersion//$'\t'/}"
-        fi
-
-        appVersion="${appVersion#"${appVersion%%[![:space:]]*}"}"
-        appVersion="${appVersion%"${appVersion##*[![:space:]]}"}"
-
-        # 6. If still unknown, fall back to CFBundleShortVersionString (app version, mark Electron as unknown)
-        if [[ -z "${appVersion}" || "${appVersion}" == "Unknown" ]]; then
-            if [[ -f "${appInfoPlist}" ]]; then
-                appVersion=$(/usr/bin/plutil -extract CFBundleShortVersionString raw -expect string "${appInfoPlist}" 2>/dev/null)
-                appVersion="${appVersion#"${appVersion%%[![:space:]]*}"}"
-                appVersion="${appVersion%"${appVersion##*[![:space:]]}"}"
-            fi
-
-            if [[ -z "${appVersion}" ]]; then
-                warning "${humanReadableCheckName}: ${appName} version unknown"
-                vulnerableApps+=("${appName} (version unknown)")
-            else
-                warning "${humanReadableCheckName}: ${appName} Electron version unknown (app ${appVersion})"
-                vulnerableApps+=("${appName} (${appVersion//, /; })")
-            fi
-            continue
-        fi
-
-        # Compare Electron version to fixed thresholds
-        vulnerable=true
-        for fixed in "${fixedVersions[@]}"; do
-            if is-at-least "${fixed}" "${appVersion}"; then
-                vulnerable=false
-                break
-            fi
-        done
-
-        if [[ "${vulnerable}" == true ]]; then
-            vulnerableApps+=("${appName} (${appVersion})")
-        else
-            safeApps+=("${appName} (${appVersion})")
-        fi
-    done
-
-    unsetopt null_glob
-
-    # Reporting
-    if [[ ${foundElectronApps} -eq 0 ]]; then
-        dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.6, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: No Electron apps found"
-        info "${humanReadableCheckName}: No Electron-based apps detected."
-        return 0
-    fi
-
-    if [[ ${#vulnerableApps[@]} -gt 0 ]]; then
-        local vulnerableList=$(printf '%s; ' "${vulnerableApps[@]}")
-        vulnerableList="${vulnerableList%; }"
-        info "vulnerableList: ${vulnerableList}"
-        dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorError}, iconalpha: 1, subtitle: ${vulnerableList}, status: error, statustext: Susceptible apps found"
-        warning "${humanReadableCheckName}: Susceptible Electron apps detected — ${vulnerableList}"
-        errorOut "${humanReadableCheckName}: ${vulnerableList}"
-        overallHealth+="${humanReadableCheckName}; "
+        dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: Not affected (macOS ${osVersion})"
     else
-        local safeList=$(printf '%s; ' "${safeApps[@]}")
-        dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.6, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: All Electron apps patched"
-        info "${humanReadableCheckName}: All Electron apps are running patched versions — ${safeList}"
+        # Electron versions where the bug is fixed
+        local fixedVersions=( "36.9.2" "37.6.0" "38.2.0" "39.0.0-alpha.7" )
+
+        # Known-safe Electron apps and their verified runtime versions
+        declare -A knownSafeElectronApps=(
+            ["Visual Studio Code.app"]="37.6.0"
+            ["Slack.app"]="38.2.0"
+        )
+
+        local foundElectronApps=0
+        local vulnerableApps=()
+        local safeApps=()
+        local -A processedElectronApps=()
+
+        setopt null_glob
+
+        local appSearchRoots=(
+            /Applications
+            /Applications/Utilities
+            /Users/"${loggedInUser}"/Applications
+        )
+        local frameworkPaths=(
+            /Applications/*.app/Contents/Frameworks/Electron\ Framework.framework
+            /Applications/Utilities/*.app/Contents/Frameworks/Electron\ Framework.framework
+            /Users/"${loggedInUser}"/Applications/*.app/Contents/Frameworks/Electron\ Framework.framework
+        )
+        local knownSafeElectronAppNames=(
+            "Visual Studio Code.app"
+            "Slack.app"
+        )
+        local app=""
+        local appName=""
+        local appSearchRoot=""
+        local appVersion=""
+        local frameworkPath=""
+        local versionFile=""
+        local frameworkPlist=""
+        local frameworkResourcesPath=""
+        local frameworkFallbackResourcesPath=""
+        local pkgJson=""
+        local asarPkgJson=""
+        local productJson=""
+        local versionTxt=""
+        local appInfoPlist=""
+        local fixed=""
+        local vulnerable=""
+
+        for appName in "${knownSafeElectronAppNames[@]}"; do
+            appVersion="${knownSafeElectronApps[$appName]}"
+            for appSearchRoot in "${appSearchRoots[@]}"; do
+                app="${appSearchRoot}/${appName}"
+                if [[ -d "${app}" ]]; then
+                    ((foundElectronApps++))
+                    processedElectronApps["${app}"]=1
+                    safeApps+=("${appName} (${appVersion}) [known fixed]")
+                fi
+            done
+        done
+
+        for frameworkPath in "${frameworkPaths[@]}"; do
+            app="${frameworkPath:h:h:h}"
+            [[ ! -d "${app}" ]] && continue
+            if [[ -n "${processedElectronApps[$app]}" ]]; then
+                continue
+            fi
+            processedElectronApps["${app}"]=1
+
+            ((foundElectronApps++))
+            appName="${app:t}"
+            appVersion="Unknown"
+
+            frameworkResourcesPath="${frameworkPath}/Versions/Current/Resources"
+            frameworkFallbackResourcesPath="${frameworkPath}/Versions/A/Resources"
+            versionFile="${frameworkResourcesPath}/version"
+            frameworkPlist="${frameworkResourcesPath}/Info.plist"
+            if [[ ! -f "${versionFile}" ]]; then
+                versionFile="${frameworkFallbackResourcesPath}/version"
+            fi
+            if [[ ! -f "${frameworkPlist}" ]]; then
+                frameworkPlist="${frameworkFallbackResourcesPath}/Info.plist"
+            fi
+            pkgJson="${app}/Contents/Resources/app/package.json"
+            asarPkgJson="${app}/Contents/Resources/app.asar.unpacked/package.json"
+            productJson="${app}/Contents/Resources/app/product.json"
+            versionTxt="${app}/Contents/Resources/app/version.txt"
+            appInfoPlist="${app}/Contents/Info.plist"
+
+            if [[ -f "${versionFile}" ]]; then
+                appVersion="${$(<"${versionFile}")//$'\n'/}"
+                appVersion="${appVersion//$'\r'/}"
+                appVersion="${appVersion//$'\t'/}"
+            elif [[ -f "${frameworkPlist}" ]]; then
+                appVersion=$(/usr/bin/plutil -extract CFBundleVersion raw -expect string "${frameworkPlist}" 2>/dev/null)
+                if [[ -z "${appVersion}" ]]; then
+                    appVersion=$(/usr/bin/plutil -extract CFBundleShortVersionString raw -expect string "${frameworkPlist}" 2>/dev/null)
+                fi
+            elif [[ -f "${pkgJson}" ]]; then
+                appVersion=$(grep -Eo '"electronVersion"[^,]*' "${pkgJson}" | awk -F'"' '{print $4}')
+            elif [[ -f "${asarPkgJson}" ]]; then
+                appVersion=$(grep -Eo '"electronVersion"[^,]*' "${asarPkgJson}" | awk -F'"' '{print $4}')
+            elif [[ -f "${productJson}" ]]; then
+                appVersion=$(grep -Eo '"version"[^,]*' "${productJson}" | awk -F'"' '{print $4}')
+                if [[ ! "${appVersion}" =~ ^[0-9]+\.[0-9]+ ]]; then
+                    local commit=$(grep -Eo '"commit"[^,]*' "${productJson}" | awk -F'"' '{print $4}')
+                    [[ -n "${commit}" ]] && appVersion="custom-${commit:0:7}"
+                fi
+            elif [[ -f "${versionTxt}" ]]; then
+                appVersion="${$(<"${versionTxt}")//$'\n'/}"
+                appVersion="${appVersion//$'\r'/}"
+                appVersion="${appVersion//$'\t'/}"
+            fi
+
+            appVersion="${appVersion#"${appVersion%%[![:space:]]*}"}"
+            appVersion="${appVersion%"${appVersion##*[![:space:]]}"}"
+
+            if [[ -z "${appVersion}" || "${appVersion}" == "Unknown" ]]; then
+                if [[ -f "${appInfoPlist}" ]]; then
+                    appVersion=$(/usr/bin/plutil -extract CFBundleShortVersionString raw -expect string "${appInfoPlist}" 2>/dev/null)
+                    appVersion="${appVersion#"${appVersion%%[![:space:]]*}"}"
+                    appVersion="${appVersion%"${appVersion##*[![:space:]]}"}"
+                fi
+
+                if [[ -z "${appVersion}" ]]; then
+                    warning "${humanReadableCheckName}: ${appName} version unknown"
+                    vulnerableApps+=("${appName} (version unknown)")
+                else
+                    warning "${humanReadableCheckName}: ${appName} Electron version unknown (app ${appVersion})"
+                    vulnerableApps+=("${appName} (${appVersion//, /; })")
+                fi
+                continue
+            fi
+
+            vulnerable=true
+            for fixed in "${fixedVersions[@]}"; do
+                if is-at-least "${fixed}" "${appVersion}"; then
+                    vulnerable=false
+                    break
+                fi
+            done
+
+            if [[ "${vulnerable}" == true ]]; then
+                vulnerableApps+=("${appName} (${appVersion})")
+            else
+                safeApps+=("${appName} (${appVersion})")
+            fi
+        done
+
+        unsetopt null_glob
+
+        if [[ ${foundElectronApps} -eq 0 ]]; then
+            dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: No Electron apps found"
+            info "${humanReadableCheckName}: No Electron-based apps detected."
+        elif [[ ${#vulnerableApps[@]} -gt 0 ]]; then
+            local vulnerableList=$(printf '%s; ' "${vulnerableApps[@]}")
+            vulnerableList="${vulnerableList%; }"
+            info "vulnerableList: ${vulnerableList}"
+            dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorError}, iconalpha: 1, subtitle: ${vulnerableList}, status: error, statustext: Susceptible apps found"
+            warning "${humanReadableCheckName}: Susceptible Electron apps detected — ${vulnerableList}"
+            errorOut "${humanReadableCheckName}: ${vulnerableList}"
+            overallHealth+="${humanReadableCheckName}; "
+            footerStatusColor="${statusColorError}"
+        else
+            local safeList=$(printf '%s; ' "${safeApps[@]}")
+            dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: All Electron apps patched"
+            info "${humanReadableCheckName}: All Electron apps are running patched versions — ${safeList}"
+        fi
     fi
+
+    dialogUpdate "icon: ${footerCheckIcon},weight=semibold,colour=${footerStatusColor}"
+    sleep $((anticipationDuration / 2))
 
 }
 
@@ -6313,6 +6484,8 @@ function checkElectronCornerMask() {
 function checkBluetoothSharing() {
 
     local humanReadableCheckName="Bluetooth Sharing"
+    local footerCheckIcon="SF=dot.radiowaves.left.and.right"
+    local footerStatusColor="${statusColorSuccess}"
     notice "Checking ${humanReadableCheckName} status …"
 
     dialogUpdate "icon: SF=dot.radiowaves.left.and.right,${organizationColorScheme}"
@@ -6328,12 +6501,16 @@ function checkBluetoothSharing() {
     # If the key doesn't exist or is 0, Bluetooth sharing is disabled (compliant)
     if [[ "${result}" == "0" ]] || [[ "${result}" =~ "does not exist" ]]; then
         info "${humanReadableCheckName}: Disabled"
-        dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.6, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: Disabled"
+        dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: Disabled"
     else
         errorOut "${humanReadableCheckName}: Enabled (value: ${result})"
         dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorFail}, iconalpha: 1, subtitle: System Settings > General > Sharing > Accessories & Internet > Bluetooth Sharing > Disable, status: fail, statustext: Enabled"
         overallHealth+="${humanReadableCheckName}; "
+        footerStatusColor="${statusColorFail}"
     fi
+
+    dialogUpdate "icon: ${footerCheckIcon},weight=semibold,colour=${footerStatusColor}"
+    sleep $((anticipationDuration / 2))
 
 }
 
@@ -6346,6 +6523,8 @@ function checkBluetoothSharing() {
 function checkPasswordHint() {
 
     local humanReadableCheckName="Password Hint"
+    local footerCheckIcon="SF=key.horizontal.fill"
+    local footerStatusColor="${statusColorSuccess}"
     notice "Checking ${humanReadableCheckName} …"
 
     dialogUpdate "icon: SF=key.horizontal.fill,${organizationColorScheme}"
@@ -6361,11 +6540,15 @@ function checkPasswordHint() {
     # If hint is empty, no password hint is set (compliant)
     if [[ -z "${hint}" ]]; then
         info "${humanReadableCheckName}: No hint set"
-        dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.6, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: Compliant"
+        dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: Compliant"
     else
         warning "${humanReadableCheckName}: Hint found"
         dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorError}, iconalpha: 1, status: error, statustext: Found (Non-compliant)"
+        footerStatusColor="${statusColorError}"
     fi
+
+    dialogUpdate "icon: ${footerCheckIcon},weight=semibold,colour=${footerStatusColor}"
+    sleep $((anticipationDuration / 2))
 
 }
 
@@ -6378,6 +6561,8 @@ function checkPasswordHint() {
 function checkAirPlayReceiver() {
 
     local humanReadableCheckName="AirPlay Receiver"
+    local footerCheckIcon="SF=airplayvideo.circle.fill"
+    local footerStatusColor="${statusColorSuccess}"
     notice "Checking ${humanReadableCheckName} status …"
 
     dialogUpdate "icon: SF=airplayvideo.circle.fill,${organizationColorScheme}"
@@ -6425,33 +6610,39 @@ function checkAirPlayReceiver() {
             errorOut "${humanReadableCheckName}: Enabled (no ${keyFound:-AirplayReceiverEnabled} key; default behavior on macOS ${osMajorVersion}.${osMinorVersion})"
             dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorFail}, iconalpha: 1, subtitle: System Settings > General > AirDrop & Handoff > AirPlay Receiver > Disable, status: fail, statustext: Enabled"
             overallHealth+="${humanReadableCheckName}; "
+            footerStatusColor="${statusColorFail}"
         else
             # 15.6.1 and earlier, and 26.x+: missing key treated as Disabled/compliant
             info "${humanReadableCheckName}: Disabled (key not found on macOS ${osMajorVersion}.${osMinorVersion})"
-            dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.6, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: Disabled"
+            dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: Disabled"
         fi
 
     elif [[ "${result}" == "0" ]]; then
         # Value is 0, disabled (compliant)
         info "${humanReadableCheckName}: Disabled (${keyFound}=${result})"
-        dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.6, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: Disabled"
+        dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: Disabled"
 
     elif [[ "${result}" == "1" ]]; then
         # Value is 1, enabled (non-compliant)
         errorOut "${humanReadableCheckName}: Enabled (${keyFound}=${result})"
         dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorFail}, iconalpha: 1, subtitle: System Settings > General > AirDrop & Handoff > AirPlay Receiver > Disable, status: fail, statustext: Enabled"
         overallHealth+="${humanReadableCheckName}; "
+        footerStatusColor="${statusColorFail}"
 
     elif [[ "${result}" == "2" ]]; then
         # Value is 2 (Contacts Only mode in some versions)
         info "${humanReadableCheckName}: Contacts Only (${keyFound}=${result})"
-        dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.6, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: Contacts Only"
+        dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: Contacts Only"
 
     else
         # Unexpected value
         warning "${humanReadableCheckName}: Unexpected value (${keyFound}=${result})"
         dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorError}, iconalpha: 1, subtitle: System Settings > General > AirDrop & Handoff > AirPlay Receiver > Disable, status: error, statustext: Status Unknown"
+        footerStatusColor="${statusColorError}"
     fi
+
+    dialogUpdate "icon: ${footerCheckIcon},weight=semibold,colour=${footerStatusColor}"
+    sleep $((anticipationDuration / 2))
 
 }
 
@@ -6464,6 +6655,8 @@ function checkAirPlayReceiver() {
 function checkAirDropSettings() {
 
     local humanReadableCheckName="AirDrop Settings"
+    local footerCheckIcon="SF=airplayaudio.circle.fill"
+    local footerStatusColor="${statusColorSuccess}"
     notice "Checking ${humanReadableCheckName} …"
 
     dialogUpdate "icon: SF=airplayaudio.circle.fill,${organizationColorScheme}"
@@ -6478,12 +6671,16 @@ function checkAirDropSettings() {
     
     if [[ "${result}" != "Everyone" ]] || [[ -z "${result}" ]]; then
         info "${humanReadableCheckName}: Compliant"
-        dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.6, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: Compliant"
+        dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: Compliant"
     else
         errorOut "${humanReadableCheckName}: Discoverable by Everyone (value: ${result})"
         dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorFail}, iconalpha: 1, subtitle: System Settings > General > AirDrop & Handoff > AirDrop > No One / Contacts Only, status: fail, statustext: Everyone"
         overallHealth+="${humanReadableCheckName}; "
+        footerStatusColor="${statusColorFail}"
     fi
+
+    dialogUpdate "icon: ${footerCheckIcon},weight=semibold,colour=${footerStatusColor}"
+    sleep $((anticipationDuration / 2))
 
 }
 
@@ -6518,7 +6715,7 @@ function updateComputerInventory() {
 
     fi
 
-    dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.6, subtitle: Latest computer inventory submitted at $( date '+%d-%b-%Y %H:%M:%S' ), status: success, statustext: Updated"
+    dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: Latest computer inventory submitted at $( date '+%d-%b-%Y %H:%M:%S' ), status: success, statustext: Updated"
 
 }
 
@@ -7038,7 +7235,7 @@ else
             dialogUpdate "progress: increment"
             dialogUpdate "progresstext: [Operation Mode: ${operationMode}] • Item No. ${i} …"
             # sleep "${anticipationDuration}"
-            dialogUpdate "listitem: index: ${i}, icon: SF=$(printf "%02d" $(($i+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.6, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: ${operationMode}"
+            dialogUpdate "listitem: index: ${i}, icon: SF=$(printf "%02d" $(($i+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: ${operationMode}"
         done
 
         dialogUpdate "icon: ${icon}"
