@@ -1,0 +1,90 @@
+{
+  "highlightColor": "#007AFF",
+  "items": [
+    {
+      "displayName": "Comparison Table Permutations",
+      "guidanceContent": [
+        {
+          "content": "✅ All possible permutations of \"comparison-table\" in Preset 6 (based on the official schema)",
+          "type": "highlight"
+        },
+
+        {
+          "content": "1. Basic stacked (default style)",
+          "expected": "Fully patched",
+          "actual": "Partially patched",
+          "type": "comparison-table"
+        },
+        {
+          "content": "2. Custom column labels",
+          "expectedLabel": "Target",
+          "expected": "Fully patched",
+          "actualLabel": "Current",
+          "actual": "Partially patched",
+          "type": "comparison-table"
+        },
+        {
+          "content": "3. With custom colors",
+          "expected": "Fully patched",
+          "expectedColor": "#34C759",
+          "actual": "Partially patched",
+          "actualColor": "#FF9500",
+          "type": "comparison-table"
+        },
+        {
+          "content": "4. With SF Symbols",
+          "expected": "Fully patched",
+          "expectedIcon": "checkmark.circle.fill",
+          "actual": "Partially patched",
+          "actualIcon": "exclamationmark.triangle.fill",
+          "type": "comparison-table"
+        },
+        {
+          "content": "5. Colors + Icons (most visual)",
+          "expectedLabel": "Expected",
+          "expected": "Fully patched",
+          "expectedColor": "#34C759",
+          "expectedIcon": "checkmark.circle.fill",
+          "actualLabel": "Actual",
+          "actual": "Partially patched",
+          "actualColor": "#FF9500",
+          "actualIcon": "exclamationmark.triangle.fill",
+          "type": "comparison-table"
+        },
+        {
+          "content": "6. Columns layout style",
+          "comparisonStyle": "columns",
+          "expected": "Fully patched",
+          "expectedColor": "#34C759",
+          "actual": "Partially patched",
+          "actualColor": "#FF9500",
+          "type": "comparison-table"
+        },
+        {
+          "content": "7. Side-by-side columns with icons and colors",
+          "comparisonStyle": "columns",
+          "expectedLabel": "Target State",
+          "expected": "Compliant",
+          "expectedColor": "#34C759",
+          "expectedIcon": "checkmark.shield",
+          "actualLabel": "Current State",
+          "actual": "Needs Attention",
+          "actualColor": "#FF3B30",
+          "actualIcon": "exclamationmark.shield.fill",
+          "type": "comparison-table"
+        },
+        {
+          "content": "8. Minimal (only expected vs actual)",
+          "expected": "100%",
+          "actual": "87%",
+          "type": "comparison-table"
+        }
+      ],
+      "guidanceTitle": "All Comparison-Table Permutations",
+      "icon": "SF=chart.bar.doc.horizontal",
+      "id": "comparison-table-demo"
+    }
+  ],
+  "preset": "6",
+  "title": "Preset 6 — All comparison-table Permutations"
+}

@@ -16,6 +16,19 @@
           "type": "phase-tracker"
         },
         {
+          "content": "Results",
+          "comparisonStyle": "columns",
+          "expectedLabel": "Target State",
+          "expected": "Compliant",
+          "expectedColor": "#34C759",
+          "expectedIcon": "shield.checkmark.fill",
+          "actualLabel": "Current State",
+          "actual": "Needs Attention",
+          "actualColor": "#FF3B30",
+          "actualIcon": "exclamationmark.shield.fill",
+          "type": "comparison-table"
+        },
+        {
           "bentoCells": [
             {
               "id": "bento-healthy",
@@ -234,7 +247,7 @@
       "icon": "https://usw2.ics.services.jamfcloud.com/icon/hash_08f287b1d7a9da36b733c0784031a4943bef3b82a2981eb937ab2f5b2bd55e91",
       "id": "healthy"
     },
-        {
+    {
       "displayName": "Help & Support",
       "guidanceContent": [
         {
@@ -265,7 +278,7 @@
       "displayName": "All Types Demo",
       "guidanceContent": [
         {
-          "content": "✅ One Demo to Rule Them All — every discovered guidanceContent type in Preset 6.",
+          "content": "✅ One Demo to Rule Them All — EVERY discovered guidanceContent type in Preset 6.",
           "type": "highlight"
         },
         {
@@ -309,6 +322,38 @@
           "type": "bullets"
         },
         {
+          "caption": "Caption: picsum.photos/id/1015/800/600",
+          "type": "image",
+          "url": "https://picsum.photos/id/1015/800/600"
+        },
+        {
+          "autoAdvance": true,
+          "autoAdvanceDelay": 4,
+          "captions": ["Slide 1: ID 1015", "Slide 2: ID 160", "Slide 3: ID 201"],
+          "images": [
+            "https://picsum.photos/id/1015/800/600",
+            "https://picsum.photos/id/160/800/600",
+            "https://picsum.photos/id/201/800/600"
+          ],
+          "type": "image-carousel"
+        },
+        {
+          "caption": "Video: Harvest Self Service Icons",
+          "type": "video",
+          "url": "https://vimeo.com/772998915"
+        },
+        {
+          "content": "Embedded web content (e.g. internal status page)",
+          "type": "webcontent",
+          "url": "https://swiftdialog.app/advanced/inspect/preset6/"
+        },
+        {
+          "content": "Portal webview for Jamf or internal tools",
+          "height": 420,
+          "type": "portal-webview",
+          "url": "https://www.jamf.com/training/100-course/"
+        },
+        {
           "content": "Enable automatic updates?",
           "id": "autoUpdates",
           "type": "checkbox"
@@ -340,6 +385,44 @@
           "id": "assetTag",
           "placeholder": "ABC-12345",
           "type": "textfield"
+        },
+        {
+          "label": "Security posture comparison",
+          "expected": "Fully patched",
+          "expectedColor": "#34C759",
+          "actual": "Partially patched",
+          "actualColor": "#FF9500",
+          "type": "comparison-table"
+        },
+        {
+          "cardIcon": "shield.checkmark.fill",
+          "categoryName": "Security",
+          "checkDetails": "• FileVault enabled\n• Gatekeeper active\n• XProtect up to date",
+          "content": "Compliance Card Example",
+          "type": "compliance-card"
+        },
+        {
+          "content": "Compliance Summary Header",
+          "type": "compliance-header"
+        },
+        {
+          "content": "Available self-service installs",
+          "type": "install-list"
+        },
+        {
+          "content": "Choose your wallpaper",
+          "type": "wallpaper-picker"
+        },
+        {
+          "columns": [
+            { "key": "feature", "label": "Feature" },
+            { "key": "status", "label": "Status" }
+          ],
+          "features": [
+            { "feature": "FileVault", "status": "Enabled" },
+            { "feature": "Firewall", "status": "Enabled" }
+          ],
+          "type": "feature-table"
         }
       ],
       "guidanceTitle": "All Types Showcase",
@@ -348,5 +431,5 @@
     }
   ],
   "preset": "6",
-  "title": "Mac Health Check — One Demo to Rule Them All (4.0.0b7)"
+  "title": "MHC: One Demo to Rule Them All"
 }
