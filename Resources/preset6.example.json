@@ -1,0 +1,267 @@
+{
+  "highlightColor": "#007AFF",
+  "items": [
+    {
+      "displayName": "Introduction",
+      "guidanceContent": [
+        {
+          "content": "Your recent Mac Health Check results are ready to review. Some executed checks need attention.",
+          "type": "text"
+        },
+        {
+          "content": "Mac Health Check Flow",
+          "phases": ["Full Check Complete", "Report Written", "Summary Available", "Cached Report Expires"],
+          "currentPhase": 4,
+          "style": "stepper",
+          "type": "phase-tracker"
+        },
+        {
+          "bentoCells": [
+            {
+              "id": "bento-healthy",
+              "column": 0,
+              "row": 0,
+              "title": "Healthy",
+              "subtitle": "5 checks",
+              "sfSymbol": "checkmark.shield",
+              "contentType": "mixed",
+              "iconSize": 56,
+              "iconWeight": "semibold",
+              "iconColor": "#34C759",
+              "textSize": "large",
+              "backgroundColor": "#2C2C2E"
+            },
+            {
+              "id": "bento-unhealthy",
+              "column": 1,
+              "row": 0,
+              "title": "Unhealthy",
+              "subtitle": "4 checks",
+              "sfSymbol": "exclamationmark.triangle",
+              "contentType": "mixed",
+              "iconSize": 56,
+              "iconWeight": "semibold",
+              "iconColor": "#FF9500",
+              "textSize": "large",
+              "backgroundColor": "#2C2C2E"
+            },
+            {
+              "id": "bento-refresh",
+              "column": 2,
+              "row": 0,
+              "title": "Refresh",
+              "subtitle": "15 minutes",
+              "sfSymbol": "clock.arrow.trianglehead.counterclockwise.rotate.90",
+              "contentType": "mixed",
+              "iconSize": 56,
+              "iconWeight": "semibold",
+              "iconColor": "#007AFF",
+              "textSize": "large",
+              "backgroundColor": "#2C2C2E"
+            }
+          ],
+          "bentoColumns": 3,
+          "type": "bento-grid"
+        },
+       {
+          "content": "These cached results may be reused for up to 15 minutes before they are refreshed.",
+          "type": "info"
+        }
+      ],
+      "guidanceTitle": "Mac Health Check Results",
+      "icon": "https://usw2.ics.services.jamfcloud.com/icon/hash_08f287b1d7a9da36b733c0784031a4943bef3b82a2981eb937ab2f5b2bd55e91",
+      "id": "introduction"
+    },
+    {
+      "displayName": "Unhealthy",
+      "guidanceContent": [
+        {
+          "content": "4 checks need attention. Warnings: 2. Failures: 1. Errors: 1. Overall status: Needs Attention.",
+          "type": "warning"
+        },
+        {
+          "bentoCells": [
+            {
+              "id": "unhealthy-updates",
+              "column": 0,
+              "row": 0,
+              "title": "Available Updates",
+              "subtitle": "Failed: 2 updates available",
+              "sfSymbol": "arrow.down.circle",
+              "contentType": "mixed",
+              "iconSize": 44,
+              "iconWeight": "semibold",
+              "iconColor": "#FF3B30",
+              "textSize": "medium",
+              "backgroundColor": "#2C1B1B"
+            },
+            {
+              "id": "unhealthy-reboot",
+              "column": 1,
+              "row": 0,
+              "title": "Last Reboot",
+              "subtitle": "Warning: overdue by 9 days",
+              "sfSymbol": "power.circle",
+              "contentType": "mixed",
+              "iconSize": 44,
+              "iconWeight": "semibold",
+              "iconColor": "#FF9500",
+              "textSize": "medium",
+              "backgroundColor": "#2C241B"
+            },
+            {
+              "id": "unhealthy-filevault",
+              "column": 0,
+              "row": 1,
+              "title": "FileVault Encryption",
+              "subtitle": "Warning: encryption in progress",
+              "sfSymbol": "lock.shield",
+              "contentType": "mixed",
+              "iconSize": 44,
+              "iconWeight": "semibold",
+              "iconColor": "#FF9500",
+              "textSize": "medium",
+              "backgroundColor": "#2C241B"
+            },
+            {
+              "id": "unhealthy-network",
+              "column": 1,
+              "row": 1,
+              "title": "Network Quality Test",
+              "subtitle": "Error: data unavailable",
+              "sfSymbol": "wifi.exclamationmark",
+              "contentType": "mixed",
+              "iconSize": 44,
+              "iconWeight": "semibold",
+              "iconColor": "#FF3B30",
+              "textSize": "medium",
+              "backgroundColor": "#2C1B1B"
+            }
+          ],
+          "bentoColumns": 2,
+          "type": "bento-grid"
+        }
+      ],
+      "guidanceTitle": "Unhealthy Results",
+      "icon": "https://usw2.ics.services.jamfcloud.com/icon/hash_08f287b1d7a9da36b733c0784031a4943bef3b82a2981eb937ab2f5b2bd55e91",
+      "id": "unhealthy"
+    },
+    {
+      "displayName": "Healthy",
+      "guidanceContent": [
+        {
+          "content": "5 checks completed successfully and remain compliant.",
+          "type": "success"
+        },
+        {
+          "bentoCells": [
+            {
+              "id": "healthy-sip",
+              "column": 0,
+              "row": 0,
+              "title": "System Integrity Protection",
+              "subtitle": "Healthy: enabled",
+              "sfSymbol": "shield.lefthalf.filled",
+              "contentType": "mixed",
+              "iconSize": 40,
+              "iconWeight": "semibold",
+              "iconColor": "#34C759",
+              "textSize": "medium",
+              "backgroundColor": "#1D2C22"
+            },
+            {
+              "id": "healthy-ssv",
+              "column": 1,
+              "row": 0,
+              "title": "Signed System Volume",
+              "subtitle": "Healthy: validated",
+              "sfSymbol": "checkmark.seal",
+              "contentType": "mixed",
+              "iconSize": 40,
+              "iconWeight": "semibold",
+              "iconColor": "#34C759",
+              "textSize": "medium",
+              "backgroundColor": "#1D2C22"
+            },
+            {
+              "id": "healthy-firewall",
+              "column": 2,
+              "row": 0,
+              "title": "Firewall",
+              "subtitle": "Healthy: enabled",
+              "sfSymbol": "firewall",
+              "contentType": "mixed",
+              "iconSize": 40,
+              "iconWeight": "semibold",
+              "iconColor": "#34C759",
+              "textSize": "medium",
+              "backgroundColor": "#1D2C22"
+            },
+            {
+              "id": "healthy-gatekeeper",
+              "column": 0,
+              "row": 1,
+              "title": "Gatekeeper / XProtect",
+              "subtitle": "Healthy: enabled",
+              "sfSymbol": "lock.trianglebadge.exclamationmark",
+              "contentType": "mixed",
+              "iconSize": 40,
+              "iconWeight": "semibold",
+              "iconColor": "#34C759",
+              "textSize": "medium",
+              "backgroundColor": "#1D2C22"
+            },
+            {
+              "id": "healthy-mdm",
+              "column": 1,
+              "row": 1,
+              "title": "Apple Device Management",
+              "subtitle": "Healthy: reachable",
+              "sfSymbol": "desktopcomputer.trianglebadge.exclamationmark",
+              "contentType": "mixed",
+              "iconSize": 40,
+              "iconWeight": "semibold",
+              "iconColor": "#34C759",
+              "textSize": "medium",
+              "backgroundColor": "#1D2C22"
+            }
+          ],
+          "bentoColumns": 3,
+          "type": "bento-grid"
+        }
+      ],
+      "guidanceTitle": "Healthy Results",
+      "icon": "https://usw2.ics.services.jamfcloud.com/icon/hash_08f287b1d7a9da36b733c0784031a4943bef3b82a2981eb937ab2f5b2bd55e91",
+      "id": "healthy"
+    },
+    {
+      "displayName": "Help & Support",
+      "guidanceContent": [
+        {
+          "content": "For assistance, please contact: IT Support.",
+          "type": "info"
+        },
+        {
+          "items": [
+            "Telephone: +1 (801) 555-1212",
+            "Email: rescue@domain.org",
+            "Knowledge Base Article: KB8675309"
+          ],
+          "type": "bullets"
+        },
+        {
+          "action": "url",
+          "content": "Website",
+          "icon": "safari.fill",
+          "type": "button",
+          "url": "https://support.domain.org"
+        }
+      ],
+      "guidanceTitle": "Help & Support",
+      "icon": "https://usw2.ics.services.jamfcloud.com/icon/hash_08f287b1d7a9da36b733c0784031a4943bef3b82a2981eb937ab2f5b2bd55e91",
+      "id": "help"
+    }
+  ],
+  "preset": "6",
+  "title": "Mac Health Check (4.0.0b7)"
+}
