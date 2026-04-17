@@ -182,14 +182,14 @@
       "displayName": "Help & Support",
       "guidanceContent": [
         {
-          "content": "For assistance, please contact: IT Support.",
+          "content": "For assistance, please contact: **${supportTeamName}**",
           "type": "info"
         },
         {
           "items": [
             "Telephone: +1 (801) 555-1212",
             "Email: rescue@domain.org",
-            "Knowledge Base Article: KB8675309"
+            "Knowledge Base Article: $supportKBURL"
           ],
           "type": "bullets"
         },
@@ -198,7 +198,41 @@
           "content": "Website",
           "icon": "safari.fill",
           "type": "button",
-          "url": "https://support.domain.org"
+          "url": "$supportTeamWebsite"
+        },
+        {
+          "content": "User Information:",
+          "type": "info"
+        },
+        {
+          "items": [
+            "**Full Name:** ${loggedInUserFullname}",
+            "**User Name:** ${loggedInUser}",
+            "**User ID:** ${loggedInUserID}",
+            "**Volume Owners:** ${volumeOwnerList}",
+            "**Secure Token:** ${secureToken}",
+            "**Location Services:** ${locationServicesStatus}",
+            "**Microsoft OneDrive Sync Date:** ${oneDriveSyncDate}",
+            "**Platform SSOe:** ${platformSSOeResult}"
+          ],
+          "type": "bullets"
+        },
+        {
+          "content": "Computer Information:",
+          "type": "info"
+        },
+        {
+          "items": [
+            "**macOS:** ${osVersion} (${osBuild})",
+            "**Dialog:** $(dialog -v)",
+            "**Script:** ${scriptVersion}",
+            "**Computer Name:** ${computerName}",
+            "**Serial Number:** ${serialNumber}",
+            "**Wi-Fi:** ${ssid}",
+            "${activeIPAddress}",
+            "**VPN IP:** ${vpnStatus}"
+          ],
+          "type": "bullets"
         }
       ],
       "guidanceTitle": "Help & Support",
