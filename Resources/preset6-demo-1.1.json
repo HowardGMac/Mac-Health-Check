@@ -1,0 +1,172 @@
+{
+  "highlightColor": "#007AFF",
+  "items": [
+    {
+      "displayName": "Introduction",
+      "guidanceContent": [
+        {
+          "content": "Your recent Mac Health Check results are ready to review. Some executed checks need attention.",
+          "type": "text"
+        },
+        {
+          "content": "These cached results may be reused for up to 15 minutes before they are refreshed.",
+          "type": "info"
+        }
+      ],
+      "guidanceTitle": "Mac Health Check Results",
+      "icon": "https://usw2.ics.services.jamfcloud.com/icon/hash_08f287b1d7a9da36b733c0784031a4943bef3b82a2981eb937ab2f5b2bd55e91",
+      "id": "introduction"
+    },
+    {
+      "displayName": "Unhealthy",
+      "guidanceContent": [
+        {
+          "content": "4 checks need attention. Warnings: 2. Failures: 1. Errors: 1. Overall status: Needs Attention.",
+          "type": "text"
+        },
+        {
+          "items": [
+            "Available Updates [Failed] - 2 updates available. Action: Install available updates, then run Mac Health Check again.",
+            "Last Reboot [Warning] - Restart overdue by 9 days. Action: Restart your Mac when work allows.",
+            "FileVault Encryption [Warning] - Encryption is still in progress. Action: Keep your Mac connected to power until FileVault completes.",
+            "Network Quality Test [Error] - Network quality data unavailable. Action: Connect to trusted network and re-run Mac Health Check."
+          ],
+          "type": "bullets"
+        }
+      ],
+      "guidanceTitle": "Unhealthy Results",
+      "icon": "https://usw2.ics.services.jamfcloud.com/icon/hash_08f287b1d7a9da36b733c0784031a4943bef3b82a2981eb937ab2f5b2bd55e91",
+      "id": "unhealthy"
+    },
+    {
+      "displayName": "Healthy",
+      "guidanceContent": [
+        {
+          "content": "5 checks completed successfully and remain compliant.",
+          "type": "text"
+        },
+        {
+          "items": [
+            "System Integrity Protection [Healthy] - Enabled",
+            "Signed System Volume [Healthy] - Validated",
+            "Firewall [Healthy] - Enabled",
+            "Gatekeeper / XProtect [Healthy] - Enabled",
+            "Apple Device Management [Healthy] - Reachable"
+          ],
+          "type": "bullets"
+        }
+      ],
+      "guidanceTitle": "Healthy Results",
+      "icon": "https://usw2.ics.services.jamfcloud.com/icon/hash_08f287b1d7a9da36b733c0784031a4943bef3b82a2981eb937ab2f5b2bd55e91",
+      "id": "healthy"
+    },
+    {
+      "displayName": "Help & Support",
+      "guidanceContent": [
+        {
+          "content": "For assistance, please contact IT Support.\nTelephone: +1 (801) 555-1212\nEmail: rescue@domain.org\nWebsite: https://support.domain.org\nKnowledge Base Article: KB8675309: https://servicenow.domain.org/support?id=kb_article_view&sysparm_article=KB8675309",
+          "type": "text"
+        },
+        {
+          "action": "url",
+          "content": "Website",
+          "icon": "safari.fill",
+          "type": "button",
+          "url": "https://support.domain.org"
+        }
+      ],
+      "guidanceTitle": "Help & Support",
+      "icon": "https://usw2.ics.services.jamfcloud.com/icon/hash_08f287b1d7a9da36b733c0784031a4943bef3b82a2981eb937ab2f5b2bd55e91",
+      "id": "help"
+    },
+    {
+      "displayName": "Inspect Summary UI Demo",
+      "guidanceContent": [
+        {
+          "content": "Demonstration of Preset 6 guidanceContent types not currently emitted by Mac Health Check inspect-summary builder.",
+          "type": "highlight"
+        },
+        {
+          "content": "Warning and success blocks remain available for future inspect-summary enhancements.",
+          "type": "warning"
+        },
+        {
+          "content": "Current script already emits text, bullets, and button content for Preset 6 summaries.",
+          "type": "success"
+        },
+        {
+          "label": "Overall compliance status",
+          "actual": "Needs Attention",
+          "state": "warning",
+          "type": "status-badge"
+        },
+        {
+          "content": "Current inspect-summary flow",
+          "phases": ["Checks Complete", "JSON Report Written", "Inspect Summary Ready", "Replay Cache Expires"],
+          "currentPhase": 2,
+          "style": "stepper",
+          "type": "phase-tracker"
+        },
+        {
+          "label": "Checks recorded",
+          "progress": 1,
+          "unit": "%",
+          "type": "progress-bar"
+        },
+        {
+          "bentoCells": [
+            {
+              "id": "bento-healthy",
+              "column": 0,
+              "row": 0,
+              "title": "Healthy",
+              "subtitle": "5 checks",
+              "sfSymbol": "checkmark.shield",
+              "contentType": "mixed",
+              "iconSize": 56,
+              "iconWeight": "semibold",
+              "iconColor": "#34C759",
+              "textSize": "large",
+              "backgroundColor": "#2C2C2E"
+            },
+            {
+              "id": "bento-unhealthy",
+              "column": 1,
+              "row": 0,
+              "title": "Needs Attention",
+              "subtitle": "4 checks",
+              "sfSymbol": "exclamationmark.triangle",
+              "contentType": "mixed",
+              "iconSize": 56,
+              "iconWeight": "semibold",
+              "iconColor": "#FF9500",
+              "textSize": "large",
+              "backgroundColor": "#2C2C2E"
+            },
+            {
+              "id": "bento-replay",
+              "column": 2,
+              "row": 0,
+              "title": "Replay Window",
+              "subtitle": "15 minutes",
+              "sfSymbol": "clock.arrow.trianglehead.counterclockwise.rotate.90",
+              "contentType": "mixed",
+              "iconSize": 56,
+              "iconWeight": "semibold",
+              "iconColor": "#007AFF",
+              "textSize": "large",
+              "backgroundColor": "#2C2C2E"
+            }
+          ],
+          "bentoColumns": 3,
+          "type": "bento-grid"
+        }
+      ],
+      "guidanceTitle": "Mac Health Check Inspect Summary Demo",
+      "icon": "https://usw2.ics.services.jamfcloud.com/icon/hash_08f287b1d7a9da36b733c0784031a4943bef3b82a2981eb937ab2f5b2bd55e91",
+      "id": "demo"
+    }
+  ],
+  "preset": "6",
+  "title": "Mac Health Check (4.0.0b7)"
+}
