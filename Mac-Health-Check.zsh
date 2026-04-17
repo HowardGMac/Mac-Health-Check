@@ -17,7 +17,7 @@
 #
 # HISTORY
 #
-# Version 4.0.0b6.3, 16-Apr-2026, Dan K. Snelson (@dan-snelson)
+# Version 4.0.0b7, 17-Apr-2026, Dan K. Snelson (@dan-snelson)
 # - Added JSON health reporting (with optional Splunk HTTP Event Collector (HEC) delivery)
 # - Added a detached swiftDialog Inspect Mode (i.e., `inspectSummaryPreset="on"`) summary plus cached replay (i.e., `inspectReplayMaximumAgeSeconds`) for `Self Service` runs
 # - Split the detached swiftDialog Inspect Mode `preset6` summary results into separate `Unhealthy` and `Healthy` sections, hiding either section when it has no recorded checks
@@ -37,7 +37,7 @@
 export PATH=/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin/
 
 # Script Version
-scriptVersion="4.0.0b6.3"
+scriptVersion="4.0.0b7"
 
 # Client-side Log
 scriptLog="/var/log/org.churchofjesuschrist.log"
@@ -195,7 +195,7 @@ customFieldsJSON="{}"
 
 # Result-collection defaults
 reportingErrorCount=0
-reportingErrors=""
+reportingErrors=""s
 reportGenerated="false"
 reportTransmissionStatus="not_configured"
 reportTransmissionHttpCode=""
@@ -2548,6 +2548,22 @@ function getInspectIntroductionText() {
 
 }
 
+function getInspectResultsTimestampText() {
+
+    if [[ -n "${reportTimestamp}" ]]; then
+        echo "Results as of: ${reportTimestamp}"
+    else
+        echo "Results as of: $( date '+%Y-%m-%d %H:%M:%S %Z' )"
+    fi
+
+}
+
+function getInspectUnhealthyCount() {
+
+    echo $(( ${#reportWarningChecks[@]} + ${#reportFailChecks[@]} + ${#reportErrorChecks[@]} ))
+
+}
+
 function getInspectResultsSummaryText() {
 
     local healthyCount="${#reportHealthyChecks[@]}"
@@ -2579,46 +2595,374 @@ function getInspectHealthyResultsSummaryText() {
 
 }
 
-function formatInspectResultBullet() {
+function getInspectPreferredResultTextByIndex() {
 
     local index="${1}"
-    local checkTitle="${checkTitleByIndex[${index}]}"
+    local rawValue="${checkStatustextByIndex[${index}]}"
+    local message="${checkMessageByIndex[${index}]}"
+
+    if [[ -n "${rawValue}" && "${rawValue}" != "Pending ..." && "${rawValue}" != "Pending …" ]]; then
+        echo "${rawValue}"
+    elif [[ -n "${message}" ]]; then
+        echo "${message}"
+    else
+        echo "Result unavailable"
+    fi
+
+}
+
+function getInspectExpectedComparisonTextByIndex() {
+
+    local index="${1}"
+    local title="${checkTitleByIndex[${index}]}"
     local normalizedStatus="${checkNormalizedStatusByIndex[${index}]}"
     local rawValue="${checkStatustextByIndex[${index}]}"
     local message="${checkMessageByIndex[${index}]}"
     local remediation="${checkRemediationByIndex[${index}]}"
-    local statusLabel="$( getDisplayStatusLabelFromNormalizedStatus "${normalizedStatus}" )"
-    local bullet="${checkTitle} [${statusLabel}]"
 
-    if [[ -n "${rawValue}" && "${rawValue}" != "Pending ..." && "${rawValue}" != "Pending …" ]]; then
-        bullet+=" - ${rawValue}"
-    elif [[ -n "${message}" ]]; then
-        bullet+=" - ${message}"
+    case "${title}" in
+        "macOS Version" )
+            echo "Supported macOS release"
+            return
+            ;;
+        "Available Updates" )
+            echo "No updates pending"
+            return
+            ;;
+        "System Integrity Protection" | "Signed System Volume" | "Firewall" | "FileVault Encryption" | "Gatekeeper / XProtect" )
+            echo "Enabled"
+            return
+            ;;
+        "Touch ID" )
+            echo "Enrolled"
+            return
+            ;;
+        "VPN Client" )
+            echo "Connected when required"
+            return
+            ;;
+        "Last Reboot" )
+            echo "Restarted within policy"
+            return
+            ;;
+        "Free Disk Space" )
+            echo "Free disk space above minimum threshold"
+            return
+            ;;
+        "Desktop Size and Item Count" )
+            echo "Desktop usage within policy"
+            return
+            ;;
+        "Downloads Size and Item Count" )
+            echo "Downloads usage within policy"
+            return
+            ;;
+        "Trash Size and Item Count" )
+            echo "Trash usage within policy"
+            return
+            ;;
+        "Password Hint" )
+            echo "Not set"
+            return
+            ;;
+        "AirDrop" )
+            echo "No One / Contacts Only"
+            return
+            ;;
+        "AirPlay Receiver" | "Bluetooth Sharing" )
+            echo "Disabled"
+            return
+            ;;
+        *"MDM Profile" )
+            echo "Installed"
+            return
+            ;;
+        *"MDM Certificate Expiration" )
+            echo "Certificate not expired"
+            return
+            ;;
+        "Apple Push Notification service" )
+            echo "Recent APNS communication"
+            return
+            ;;
+        *"Check-In" )
+            echo "Checked in recently"
+            return
+            ;;
+        *"Inventory" )
+            echo "Inventory updated recently"
+            return
+            ;;
+        "Apple Push Notification Hosts" | "Apple Device Management" | "Apple Software and Carrier Updates" | "Apple Certificate Validation" | "Apple Identity and Content Services" )
+            echo "Reachable"
+            return
+            ;;
+        "Homebrew Status" )
+            echo "Current or not installed"
+            return
+            ;;
+        "Electron Corner Mask" )
+            echo "No susceptible Electron apps detected"
+            return
+            ;;
+        "Network Quality Test" )
+            echo "Network quality passed"
+            return
+            ;;
+        "Microsoft Teams" | "Fleet Desktop" )
+            echo "Installed"
+            return
+            ;;
+    esac
+
+    if [[ -n "${remediation}" && "${remediation}" != "${organizationBoilerplateComplianceMessage}" && "${remediation}" != "${message}" && "${remediation}" != "${rawValue}" ]]; then
+        echo "${remediation}"
+    elif [[ "${normalizedStatus}" == "healthy" ]]; then
+        echo "$( getInspectPreferredResultTextByIndex "${index}" )"
+    else
+        echo "${organizationBoilerplateComplianceMessage}"
     fi
-
-    if [[ "${normalizedStatus}" != "healthy" && -n "${remediation}" ]]; then
-        bullet+=". Action: ${remediation}"
-    fi
-
-    printf '%s' "${bullet}"
 
 }
 
-function buildInspectResultItemsJSONFromTitles() {
+function getInspectComparisonActualTextByIndex() {
 
-    local inspectResultItems=()
+    local index="${1}"
+    local normalizedStatus="${checkNormalizedStatusByIndex[${index}]}"
+    local preferredValue="$( getInspectPreferredResultTextByIndex "${index}" )"
+
+    if [[ "${normalizedStatus}" == "healthy" ]]; then
+        echo "${preferredValue}"
+    else
+        echo "$( getDisplayStatusLabelFromNormalizedStatus "${normalizedStatus}" ): ${preferredValue}"
+    fi
+
+}
+
+function getInspectStatusColor() {
+
+    case "${1}" in
+        "healthy" )
+            echo "#34C759"
+            ;;
+        "warning" )
+            echo "#FF9500"
+            ;;
+        "fail" | "error" )
+            echo "#FF3B30"
+            ;;
+        * )
+            echo "#8E8E93"
+            ;;
+    esac
+
+}
+
+function getInspectStatusIcon() {
+
+    case "${1}" in
+        "healthy" )
+            echo "checkmark.circle.fill"
+            ;;
+        "warning" )
+            echo "exclamationmark.triangle.fill"
+            ;;
+        "fail" )
+            echo "xmark.circle.fill"
+            ;;
+        * )
+            echo "exclamationmark.circle.fill"
+            ;;
+    esac
+
+}
+
+function getInspectCheckSymbolByIndex() {
+
+    local index="${1}"
+    local title="${checkTitleByIndex[${index}]:-}"
+
+    case "${title:l}" in
+        *macos*version* )
+            echo "apple.logo"
+            ;;
+        *available*update* )
+            echo "arrow.down.circle"
+            ;;
+        *system*integrity*protection* )
+            echo "shield.lefthalf.filled"
+            ;;
+        *signed*system*volume* )
+            echo "checkmark.seal"
+            ;;
+        *firewall* )
+            echo "firewall"
+            ;;
+        *filevault* )
+            echo "lock.shield"
+            ;;
+        *gatekeeper*|*xprotect* )
+            echo "lock.trianglebadge.exclamationmark"
+            ;;
+        *touch*id* )
+            echo "touchid"
+            ;;
+        *vpn* )
+            echo "lock.circle"
+            ;;
+        *reboot* )
+            echo "power.circle"
+            ;;
+        *disk*space*|*storage* )
+            echo "internaldrive"
+            ;;
+        *desktop* )
+            echo "desktopcomputer"
+            ;;
+        *downloads* )
+            echo "folder"
+            ;;
+        *trash* )
+            echo "trash"
+            ;;
+        *password*hint* )
+            echo "key"
+            ;;
+        *airdrop* )
+            echo "airdrop"
+            ;;
+        *airplay*receiver* )
+            echo "airplayaudio"
+            ;;
+        *bluetooth*sharing* )
+            echo "bluetooth"
+            ;;
+        *mdm*profile* )
+            echo "checkmark.shield"
+            ;;
+        *certificate*expiration*|*certificate*validation* )
+            echo "checkmark.seal"
+            ;;
+        *push*notification*service* )
+            echo "bell.badge"
+            ;;
+        *check-in*|*inventory* )
+            echo "arrow.triangle.2.circlepath"
+            ;;
+        *push*notification*hosts*|*network*quality* )
+            echo "wifi"
+            ;;
+        *device*management* )
+            echo "desktopcomputer.trianglebadge.exclamationmark"
+            ;;
+        *software*and*carrier*updates* )
+            echo "square.and.arrow.down"
+            ;;
+        *identity*and*content*services* )
+            echo "person.text.rectangle"
+            ;;
+        *homebrew* )
+            echo "shippingbox"
+            ;;
+        *electron* )
+            echo "bolt.circle"
+            ;;
+        *teams* )
+            echo "person.3"
+            ;;
+        * )
+            echo "$( getInspectStatusIcon "${checkNormalizedStatusByIndex[${index}]}" )"
+            ;;
+    esac
+
+}
+
+function buildInspectComparisonTableJSONByIndex() {
+
+    local index="${1}"
+    local title="${checkTitleByIndex[${index}]}"
+    local normalizedStatus="${checkNormalizedStatusByIndex[${index}]}"
+
+    printf '%s' "{"
+    printf '%s' "\"content\":$( jsonString "${title}" ),"
+    printf '%s' "\"comparisonStyle\":\"columns\","
+    printf '%s' "\"expectedLabel\":\"Expected\","
+    printf '%s' "\"expected\":$( jsonString "$( getInspectExpectedComparisonTextByIndex "${index}" )" ),"
+    printf '%s' "\"expectedColor\":\"#34C759\","
+    printf '%s' "\"expectedIcon\":\"checkmark.circle.fill\","
+    printf '%s' "\"actualLabel\":\"Actual\","
+    printf '%s' "\"actual\":$( jsonString "$( getInspectComparisonActualTextByIndex "${index}" )" ),"
+    printf '%s' "\"actualColor\":$( jsonString "$( getInspectStatusColor "${normalizedStatus}" )" ),"
+    printf '%s' "\"actualIcon\":$( jsonString "$( getInspectCheckSymbolByIndex "${index}" )" ),"
+    printf '%s' "\"type\":\"comparison-table\""
+    printf '%s' "}"
+
+}
+
+function buildInspectComparisonEntriesJSONFromTitles() {
+
     local title=""
     local index=""
+    local separator=""
 
     for title in "$@"; do
         index="${checkIndexByTitle[${title}]}"
 
         if [[ "${index}" == <-> ]]; then
-            inspectResultItems+=( "$( formatInspectResultBullet "${index}" )" )
+            printf '%s' "${separator}$( buildInspectComparisonTableJSONByIndex "${index}" )"
+            separator=","
         fi
     done
 
-    buildJSONStringArray "${inspectResultItems[@]}"
+}
+
+function buildInspectOverviewGuidanceContentJSON() {
+
+    local healthyCount="${#reportHealthyChecks[@]}"
+    local unhealthyCount="$( getInspectUnhealthyCount )"
+
+    printf '%s' "["
+    printf '%s' "{\"content\":\"Mac Health Check Flow\",\"phases\":[\"Full Check Complete\",\"Report Written\",\"Summary Available\",\"Cached Report Expires\"],\"currentPhase\":4,\"style\":\"stepper\",\"type\":\"phase-tracker\"},"
+    printf '%s' "{\"content\":$( jsonString "$( getInspectIntroductionText )" ),\"type\":\"text\"},"
+    printf '%s' "{\"content\":$( jsonString "$( getInspectResultsTimestampText )" ),\"comparisonStyle\":\"columns\",\"expectedLabel\":\"Healthy\",\"expected\":$( jsonString "${healthyCount} checks passed" ),\"expectedColor\":\"#34C759\",\"expectedIcon\":\"checkmark.shield\",\"actualLabel\":\"Unhealthy\",\"actual\":$( jsonString "${unhealthyCount} checks need attention" ),\"actualColor\":$( jsonString "$( getInspectStatusColor "${reportOverallStatus}" )" ),\"actualIcon\":$( jsonString "$( getInspectStatusIcon "${reportOverallStatus}" )" ),\"type\":\"comparison-table\"},"
+    printf '%s' "{\"content\":$( jsonString "$( getInspectReplayExpirationMessage )" ),\"type\":\"info\"}"
+    printf '%s' "]"
+
+}
+
+function buildInspectSupportLineItemsJSON() {
+
+    local inspectSupportItems=()
+    local supportLabelVar=""
+    local supportValueVar=""
+    local supportLabel=""
+    local supportValue=""
+
+    for supportIndex in {1..6}; do
+        supportLabelVar="supportLabel${supportIndex}"
+        supportValueVar="supportValue${supportIndex}"
+        supportLabel="${(P)supportLabelVar}"
+        supportValue="${(P)supportValueVar}"
+
+        if [[ -n "${supportLabel}" && -n "${supportValue}" ]]; then
+            if [[ -n "${supportButtonAction}" ]] && [[ "${supportValue}" == "${supportButtonAction}" || "${supportValue}" == *"(${supportButtonAction})"* ]]; then
+                continue
+            fi
+
+            inspectSupportItems+=( "${supportLabel}: $( normalizeInspectSupportValue "${supportValue}" )" )
+        fi
+    done
+
+    if (( ${#inspectSupportItems[@]} == 0 )); then
+        [[ -n "${supportTeamPhone}" ]] && inspectSupportItems+=( "Telephone: ${supportTeamPhone}" )
+        [[ -n "${supportTeamEmail}" ]] && inspectSupportItems+=( "Email: ${supportTeamEmail}" )
+        if [[ -n "${supportTeamWebsite}" ]] && [[ "${supportTeamWebsite}" != "${supportButtonAction}" ]]; then
+            inspectSupportItems+=( "Website: ${supportTeamWebsite}" )
+        fi
+        [[ -n "${supportKB}" ]] && inspectSupportItems+=( "Knowledge Base Article: ${supportKB}" )
+    fi
+
+    buildJSONStringArray "${inspectSupportItems[@]}"
 
 }
 
@@ -2640,12 +2984,7 @@ function getInspectReplayExpirationMessage() {
 
 function buildInspectIntroductionGuidanceContentJSON() {
 
-    local introductionText="$( getInspectIntroductionText )"
-
-    printf '%s' "["
-    printf '%s' "{\"content\":$( jsonString "${introductionText}" ),\"type\":\"text\"},"
-    printf '%s' "{\"content\":$( jsonString "$( getInspectReplayExpirationMessage )" ),\"type\":\"info\"}"
-    printf '%s' "]"
+    buildInspectOverviewGuidanceContentJSON
 
 }
 
@@ -2670,23 +3009,31 @@ function inspectHealthyResultsExist() {
 function buildInspectUnhealthyResultsGuidanceContentJSON() {
 
     local unhealthyResultTitles=()
+    local comparisonEntriesJSON=""
 
     unhealthyResultTitles+=( "${reportErrorChecks[@]}" )
     unhealthyResultTitles+=( "${reportFailChecks[@]}" )
     unhealthyResultTitles+=( "${reportWarningChecks[@]}" )
+    comparisonEntriesJSON="$( buildInspectComparisonEntriesJSONFromTitles "${unhealthyResultTitles[@]}" )"
 
     printf '%s' "["
-    printf '%s' "{\"content\":$( jsonString "$( getInspectUnhealthyResultsSummaryText )" ),\"type\":\"text\"},"
-    printf '%s' "{\"items\":$( buildInspectResultItemsJSONFromTitles "${unhealthyResultTitles[@]}" ),\"type\":\"bullets\"}"
+    printf '%s' "{\"content\":$( jsonString "$( getInspectUnhealthyResultsSummaryText )" ),\"type\":\"warning\"}"
+    if [[ -n "${comparisonEntriesJSON}" ]]; then
+        printf '%s' ",${comparisonEntriesJSON}"
+    fi
     printf '%s' "]"
 
 }
 
 function buildInspectHealthyResultsGuidanceContentJSON() {
 
+    local comparisonEntriesJSON="$( buildInspectComparisonEntriesJSONFromTitles "${reportHealthyChecks[@]}" )"
+
     printf '%s' "["
-    printf '%s' "{\"content\":$( jsonString "$( getInspectHealthyResultsSummaryText )" ),\"type\":\"text\"},"
-    printf '%s' "{\"items\":$( buildInspectResultItemsJSONFromTitles "${reportHealthyChecks[@]}" ),\"type\":\"bullets\"}"
+    printf '%s' "{\"content\":$( jsonString "$( getInspectHealthyResultsSummaryText )" ),\"type\":\"success\"}"
+    if [[ -n "${comparisonEntriesJSON}" ]]; then
+        printf '%s' ",${comparisonEntriesJSON}"
+    fi
     printf '%s' "]"
 
 }
@@ -2695,7 +3042,7 @@ function buildInspectFallbackResultsGuidanceContentJSON() {
 
     printf '%s' "["
     printf '%s' "{\"content\":$( jsonString "$( getInspectResultsSummaryText )" ),\"type\":\"text\"},"
-    printf '%s' "{\"items\":$( buildJSONStringArray "No executed checks were recorded for this run." ),\"type\":\"bullets\"}"
+    printf '%s' "{\"content\":\"No executed checks were recorded for this run.\",\"type\":\"info\"}"
     printf '%s' "]"
 
 }
@@ -2735,11 +3082,17 @@ function buildInspectSupportText() {
 
 function buildInspectHelpGuidanceContentJSON() {
 
-    local helpText="$( buildInspectSupportText )"
+    local helpText="For assistance, please contact: ${supportTeamName}."
     local buttonText="${supportButtonText:-${supportButtonAction}}"
+    local supportItemsJSON="$( buildInspectSupportLineItemsJSON )"
 
     printf '%s' "["
-    printf '%s' "{\"content\":$( jsonString "${helpText}" ),\"type\":\"text\"}"
+    printf '%s' "{\"content\":$( jsonString "${helpText}" ),\"type\":\"info\"}"
+
+    if [[ "${supportItemsJSON}" != "[]" ]]; then
+        printf '%s' ","
+        printf '%s' "{\"items\":${supportItemsJSON},\"type\":\"bullets\"}"
+    fi
 
     if [[ -n "${supportButtonAction}" ]]; then
         printf '%s' ","
@@ -2756,7 +3109,7 @@ function buildInspectItemsJSONArray() {
     local separator=""
 
     printf '%s' "["
-    printf '%s' "{\"displayName\":\"Introduction\",\"guidanceContent\":$( buildInspectIntroductionGuidanceContentJSON ),\"guidanceTitle\":\"Mac Health Check Results\",\"icon\":$( jsonString "${sectionIcon}" ),\"id\":\"introduction\"}"
+    printf '%s' "{\"displayName\":\"Overview\",\"guidanceContent\":$( buildInspectIntroductionGuidanceContentJSON ),\"guidanceTitle\":\"Mac Health Check Results\",\"icon\":$( jsonString "${sectionIcon}" ),\"id\":\"overview\"}"
     separator=","
 
     if inspectUnhealthyResultsExist; then
@@ -2821,6 +3174,17 @@ function validateInspectConfigFile() {
                         (.action == "url")
                         and (.content | type == "string") and (.content | length > 0)
                         and (.url | type == "string") and (.url | length > 0)
+                    elif .type == "comparison-table" then
+                        (.content | type == "string") and (.content | length > 0)
+                        and (.expectedLabel | type == "string") and (.expectedLabel | length > 0)
+                        and (.expected | type == "string") and (.expected | length > 0)
+                        and (.actualLabel | type == "string") and (.actualLabel | length > 0)
+                        and (.actual | type == "string") and (.actual | length > 0)
+                    elif .type == "phase-tracker" then
+                        (.content | type == "string") and (.content | length > 0)
+                        and (.phases | type == "array") and (.phases | length > 0)
+                        and all(.phases[]; (type == "string") and (length > 0))
+                        and (.currentPhase | type == "number")
                     else
                         (.content | type == "string") and (.content | length > 0)
                     end)
