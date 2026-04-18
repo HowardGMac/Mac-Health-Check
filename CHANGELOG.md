@@ -2,11 +2,11 @@
 
 ## CHANGELOG
 
-### 4.0.0b8 (17-Apr-2026)
+### 4.0.0b10 (17-Apr-2026)
 - Added JSON health reporting (with optional Splunk HTTP Event Collector (HEC) delivery)
-- Added a detached swiftDialog Inspect Mode (i.e., `inspectSummaryPreset="on"`) summary plus cached replay (i.e., `inspectReplayMaximumAgeSeconds`) for `Self Service` runs
+- Added a stand-alone swiftDialog Inspect Mode-flavored report (i.e., `inspectSummaryPreset="on"`), plus cached replay (i.e., `inspectReplayMaximumAgeSeconds`) for `Self Service` runs
 - Refactored `checkElectronCornerMask` to reduce execution time
-- Added "Status Colors" global variables for easier customization of check status colors
+- Many quality-of-life user-interface improvements
 - Raised the minimum required swiftDialog version to `3.1.0.4976`
 
 ### 3.2.0 (02-Apr-2026)

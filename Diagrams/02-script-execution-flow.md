@@ -1,6 +1,6 @@
 # Mac Health Check: Script Execution Flow
 
-This flowchart documents the `4.0.0b7` decision logic executed each time Mac Health Check runs, from the initial invocation through pre-flight validation, health check execution, and final output.
+This flowchart documents the `4.0.0b10` decision logic executed each time Mac Health Check runs, from the initial invocation through pre-flight validation, health check execution, and final output.
 
 ```mermaid
 graph TB
@@ -35,7 +35,7 @@ graph TB
         SDCHECK{"swiftDialog<br>≥ 3.1.0.4976?"}
         SDINSTALL["Download & install<br>swiftDialog from GitHub"]
         KILLSD["Kill existing<br>Dialog instances"]
-        REPLAYCHECK{"Self Service + inspectSummaryPreset=on<br>cached inspect config<br>< 15 minutes old and valid?"}
+        REPLAYCHECK{"Self Service + inspectSummaryPreset=on<br>cached inspect config age<br>< inspectReplayMaximumAgeSeconds and valid?"}
         REPLAYLAUNCH["Launch cached Preset 6 summary<br>skip checks and exit"]
         DOCKBADGE["Prepare Dock launch state<br>and initial badge<br>(non-Silent when enabled)"]
 
@@ -95,7 +95,7 @@ graph TB
     subgraph ModeCheck2["🎛️ Operation Mode Branch"]
         MODESWITCH{"operationMode?"}
         ISSILENT["Silent Mode<br>Skip main dialog — log only"]
-        ISDEV["Development Mode<br>Run current single-check dev path<br>(Microsoft Teams)"]
+        ISDEV["Development Mode<br>Run current dev subset<br>(Homebrew + Electron Corner Mask)"]
         ISTEST["Test Mode<br>Simulate current vendor list items<br>without running real checks"]
         NORMAL["Self Service / Debug<br>Full interactive run"]
 
@@ -203,7 +203,7 @@ Set via MDM policy parameter. Determines UI behavior and which checks execute. T
 The script must run as root. If not, it calls `fatal()` and exits immediately with a log entry.
 
 ### 3. jq Availability
-The script requires `jq` for JSON validation, formatting, and dialog/listitem JSON merging. If `jq` is unavailable, `4.0.0b7` exits during pre-flight with a fatal dependency message.
+The script requires `jq` for JSON validation, formatting, and dialog/listitem JSON merging. If `jq` is unavailable, `4.0.0b10` exits during pre-flight with a fatal dependency message.
 
 ### 4. swiftDialog Version
 The script requires swiftDialog ≥ 3.1.0.4976. If the installed version is older (or swiftDialog is absent), the script downloads and installs the latest release from GitHub before proceeding.
@@ -231,7 +231,7 @@ At the end of the run, `generateAndSendSplunkReport()` writes the canonical loca
 In `Self Service`, the script uses finalized in-memory results to generate `/var/tmp/MacHealthCheck-Inspect-Config.json`, then tries to launch a detached swiftDialog Inspect Mode fixed Preset 6 guided summary. That summary now separates recorded results into `Unhealthy` and `Healthy` sections and omits either section when that bucket is empty. On a normal run, the existing `completionTimer` countdown remains on the main dialog whether the detached summary launches or not. Set `inspectSummaryPreset="off"` to skip both the handoff generation and detached launch.
 
 ### 11. Self Service Cached Replay
-If `/var/tmp/MacHealthCheck-Inspect-Config.json` is less than 15 minutes old and the cached inspect JSON still validates, a rerun in `Self Service` skips health checks entirely, launches the cached fixed Preset 6 guided summary immediately, and exits without showing the main dialog countdown. Setting `inspectSummaryPreset="off"` disables this replay path.
+If `/var/tmp/MacHealthCheck-Inspect-Config.json` is younger than `inspectReplayMaximumAgeSeconds` and the cached inspect JSON still validates, a rerun in `Self Service` skips health checks entirely, launches the cached fixed Preset 6 guided summary immediately, and exits without showing the main dialog countdown. Setting `inspectSummaryPreset="off"` disables this replay path.
 
 ### 12. Failure Notification
 When non-`Silent` runs detect failures, `displayFailureNotification()` launches a persistent swiftDialog pseudo-alert summarizing the failed health checks and offering a support action link.

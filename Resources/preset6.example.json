@@ -241,5 +241,7 @@
     }
   ],
   "preset": "6",
-  "title": "Mac Health Check (4.0.0b7)"
+  "title": "Mac Health Check (4.0.0b10)",
+  "height": 750,
+  "width": 975
 }

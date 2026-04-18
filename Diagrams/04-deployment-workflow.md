@@ -1,6 +1,6 @@
 # Mac Health Check: Deployment Workflow
 
-This diagram provides a step-by-step guide for deploying the `4.0.0b7` release of Mac Health Check through an MDM solution. Follow the phases in order for a successful deployment.
+This diagram provides a step-by-step guide for deploying the `4.0.0b10` release of Mac Health Check through an MDM solution. Follow the phases in order for a successful deployment.
 
 ```mermaid
 graph TB
@@ -252,7 +252,7 @@ Use the three developer-oriented modes to validate behavior before rolling out t
 After production deployment, monitor:
 
 - **Client logs** at `/var/log/org.churchofjesuschrist.log` on managed Macs — look for `[WARNING]` and `[ERROR]` entries
-- **Dock badge, inspect summary handoff, cached replay, and persistent failure notifications** on test Macs in non-`Silent` modes — confirm countdown badges update per check, `Self Service` launches the detached fixed Preset 6 guided summary with separate `Unhealthy` and `Healthy` sections during the retained main-dialog countdown when `inspectSummaryPreset="on"`, reruns within 15 minutes replay the cached summary without re-running checks only when the feature remains enabled, and failed runs still show the current pseudo-alert summary and support action
+- **Dock badge, inspect summary handoff, cached replay, and persistent failure notifications** on test Macs in non-`Silent` modes — confirm countdown badges update per check, `Self Service` launches the detached fixed Preset 6 guided summary with separate `Unhealthy` and `Healthy` sections during the retained main-dialog countdown when `inspectSummaryPreset="on"`, reruns replay the cached summary without re-running checks only while the cached handoff file remains younger than `inspectReplayMaximumAgeSeconds`, and failed runs still show the current pseudo-alert summary and support action
 - **Webhook notifications** in Teams or Slack (if configured) — review failure summaries
 - **MDM inventory** — for Jamf Pro, each run can trigger a recon; use Smart Group criteria based on extension attributes for fleet-wide compliance visibility
 

@@ -1,6 +1,6 @@
 # Mac Health Check: System Architecture
 
-This diagram shows the `4.0.0b7` Mac Health Check ecosystem, from administrator customization through MDM deployment, client-side execution, user interaction, and results output.
+This diagram shows the `4.0.0b10` Mac Health Check ecosystem, from administrator customization through MDM deployment, client-side execution, user interaction, and results output.
 
 ```mermaid
 graph TB
@@ -155,7 +155,7 @@ The script inspects installed configuration profiles to identify the MDM vendor,
 
 ### Runtime Execution
 
-Health checks execute sequentially, with each result posted to the swiftDialog dialog via a named pipe (`dialogUpdate`) and captured into a structured per-check result collector for final reporting. When Dock integration is enabled, non-`Silent` runs also show a Dock icon with a decreasing badge count. After all checks complete, the main dialog updates to its final healthy / unhealthy state, non-`Silent` runs with failures still trigger a persistent swiftDialog pseudo-alert notification, and `4.0.0b7` writes a final JSON health report before cleanup. In `Self Service`, a normal run also launches a detached Inspect Mode fixed Preset 6 guided summary with separate `Unhealthy` and `Healthy` sections while the main dialog retains its standard countdown, and reruns within 15 minutes can replay that cached summary without re-running checks when `inspectSummaryPreset="on"`.
+Health checks execute sequentially, with each result posted to the swiftDialog dialog via a named pipe (`dialogUpdate`) and captured into a structured per-check result collector for final reporting. When Dock integration is enabled, non-`Silent` runs also show a Dock icon with a decreasing badge count. After all checks complete, the main dialog updates to its final healthy / unhealthy state, non-`Silent` runs with failures still trigger a persistent swiftDialog pseudo-alert notification, and `4.0.0b10` writes a final JSON health report before cleanup. In `Self Service`, a normal run also launches a detached Inspect Mode fixed Preset 6 guided summary with separate `Unhealthy` and `Healthy` sections while the main dialog retains its standard countdown, and reruns can replay that cached summary without re-running checks when `inspectSummaryPreset="on"` and the handoff file is still younger than `inspectReplayMaximumAgeSeconds`.
 
 ---
 
@@ -165,7 +165,7 @@ Health checks execute sequentially, with each result posted to the swiftDialog d
 
 **JSON Report** — Every run writes the canonical report artifact to `/var/tmp/MacHealthCheck-Report.json` with root-only permissions. Optional Splunk HEC delivery wraps that same finalized report data rather than generating a second source of truth.
 
-**Inspect Summary** — `Self Service` runs also generate a readable handoff file at `/var/tmp/MacHealthCheck-Inspect-Config.json`, which the detached Inspect Mode fixed Preset 6 guided summary reads during the retained main-dialog countdown and can replay for up to 15 minutes on rerun when `inspectSummaryPreset="on"`. The summary now separates recorded results into `Unhealthy` and `Healthy` sections and omits either section when no checks were recorded in that bucket. Set the toggle to `off` to disable both behaviors entirely.
+**Inspect Summary** — `Self Service` runs also generate a readable handoff file at `/var/tmp/MacHealthCheck-Inspect-Config.json`, which the detached Inspect Mode fixed Preset 6 guided summary reads during the retained main-dialog countdown and can replay on rerun when `inspectSummaryPreset="on"` plus the cached handoff file remains younger than `inspectReplayMaximumAgeSeconds`. The summary now separates recorded results into `Unhealthy` and `Healthy` sections and omits either section when no checks were recorded in that bucket. Set the toggle to `off` to disable both behaviors entirely.
 
 **Failure Notification** — When a non-`Silent` run detects failures, `displayFailureNotification()` presents a persistent swiftDialog pseudo-alert listing the failed health checks and offering a support link.
 

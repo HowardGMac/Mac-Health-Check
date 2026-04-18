@@ -17,11 +17,11 @@
 #
 # HISTORY
 #
-# Version 4.0.0b9, 17-Apr-2026, Dan K. Snelson (@dan-snelson)
+# Version 4.0.0b10, 17-Apr-2026, Dan K. Snelson (@dan-snelson)
 # - Added JSON health reporting (with optional Splunk HTTP Event Collector (HEC) delivery)
-# - Added a detached swiftDialog Inspect Mode (i.e., `inspectSummaryPreset="on"`) summary plus cached replay (i.e., `inspectReplayMaximumAgeSeconds`) for `Self Service` runs
+# - Added a stand-alone swiftDialog Inspect Mode-flavored report (i.e., `inspectSummaryPreset="on"`), plus cached replay (i.e., `inspectReplayMaximumAgeSeconds`) for `Self Service` runs
 # - Refactored `checkElectronCornerMask` to reduce execution time
-# - Added "Status Colors" global variables for easier customization of check status colors
+# - Many quality-of-life user-interface improvements
 # - Raised the minimum required swiftDialog version to `3.1.0.4976`
 #
 ####################################################################################################
@@ -37,7 +37,7 @@
 export PATH=/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin/
 
 # Script Version
-scriptVersion="4.0.0b9"
+scriptVersion="4.0.0b10"
 
 # Client-side Log
 scriptLog="/var/log/org.churchofjesuschrist.log"
@@ -187,7 +187,7 @@ completionTimer="60"
 inspectSummaryPreset="on"
 inspectConfigPath="/var/tmp/MacHealthCheck-Inspect-Config.json"
 inspectLaunchLogPath="/var/tmp/MacHealthCheck-Inspect-Summary.log"
-inspectReplayMaximumAgeSeconds="900000"
+inspectReplayMaximumAgeSeconds="900" # 15 minutes
 
 # Splunk and JSON reporting defaults
 splunkJSONReportPath="/var/tmp/MacHealthCheck-Report.json"
@@ -200,7 +200,7 @@ customFieldsJSON="{}"
 
 # Result-collection defaults
 reportingErrorCount=0
-reportingErrors=""s
+reportingErrors=""
 reportGenerated="false"
 reportTransmissionStatus="not_configured"
 reportTransmissionHttpCode=""
@@ -1492,7 +1492,7 @@ fi
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 function updateScriptLog() {
-    echo "${organizationScriptName} ($scriptVersion): $( date +%Y-%m-%d\ %H:%M:%S ) - ${1}" | tee -a "${scriptLog}"
+    echo "${organizationScriptName} ($scriptVersion): $( date '+%A, %B %d at %I:%M %p %Z' ) - ${1}" | tee -a "${scriptLog}"
 }
 
 function preFlight()    { updateScriptLog "[PRE-FLIGHT]      ${1}"; }
@@ -1657,7 +1657,7 @@ function dialogUpdate(){
     fi
 
     if [[ "${operationMode}" != "Silent" ]]; then
-        sleep 0.3
+        sleep 0.1
         echo "${dialogCommand}" >> "${dialogCommandFile}"
 
         # Track check completion from listitem status transitions and update dock badge.
@@ -2580,12 +2580,40 @@ function getInspectIntroductionText() {
 
 }
 
+function formatInspectTimestampForDisplay() {
+
+    local rawTimestamp="${1}"
+    local parsedTimestamp="${rawTimestamp}"
+    local formattedTimestamp=""
+
+    if [[ -z "${rawTimestamp}" ]]; then
+        return
+    fi
+
+    if [[ "${rawTimestamp}" == *[+-]??:?? ]]; then
+        parsedTimestamp="${rawTimestamp%:*}${rawTimestamp##*:}"
+        formattedTimestamp="$( date -j -f '%Y-%m-%dT%H:%M:%S%z' "${parsedTimestamp}" '+%A, %B %d at %I:%M %p %Z' 2>/dev/null )"
+    elif [[ "${rawTimestamp}" == *Z ]]; then
+        formattedTimestamp="$( date -j -u -f '%Y-%m-%dT%H:%M:%SZ' "${rawTimestamp}" '+%A, %B %d at %I:%M %p %Z' 2>/dev/null )"
+    fi
+
+    if [[ -n "${formattedTimestamp}" ]]; then
+        echo "${formattedTimestamp}"
+    else
+        echo "${rawTimestamp}"
+    fi
+
+}
+
 function getInspectResultsTimestampText() {
 
+    local inspectDisplayTimestamp=""
+
     if [[ -n "${reportTimestamp}" ]]; then
-        echo "Results as of: ${reportTimestamp}"
+        inspectDisplayTimestamp="$( formatInspectTimestampForDisplay "${reportTimestamp}" )"
+        echo "Results as of: ${inspectDisplayTimestamp}"
     else
-        echo "Results as of: $( date '+%Y-%m-%d %H:%M:%S %Z' )"
+        echo "Results as of: $( date '+%A, %B %d at %I:%M %p %Z' )"
     fi
 
 }
@@ -2775,13 +2803,13 @@ function getInspectStatusColor() {
 
     case "${1}" in
         "healthy" )
-            echo "#34C759"
+            echo "#65C466"
             ;;
         "warning" )
-            echo "#FF9500"
+            echo "#F5BE0A"
             ;;
         "fail" | "error" )
-            echo "#FF3B30"
+            echo "#EB4C46"
             ;;
         * )
             echo "#8E8E93"
@@ -2868,7 +2896,7 @@ function getInspectCheckSymbolByIndex() {
             echo "lock.shield"
             ;;
         *gatekeeper*|*xprotect* )
-            echo "lock.trianglebadge.exclamationmark"
+            echo "lock.circle"
             ;;
         *touch*id* )
             echo "touchid"
@@ -2919,7 +2947,7 @@ function getInspectCheckSymbolByIndex() {
             echo "wifi"
             ;;
         *device*management* )
-            echo "desktopcomputer.trianglebadge.exclamationmark"
+            echo "desktopcomputer.badge.shield.checkmark"
             ;;
         *software*and*carrier*updates* )
             echo "square.and.arrow.down"
@@ -2934,7 +2962,7 @@ function getInspectCheckSymbolByIndex() {
             echo "bolt.circle"
             ;;
         *teams* )
-            echo "person.3"
+            echo "folder.fill.badge.plus"
             ;;
         * )
             echo "$( getInspectStatusIcon "${checkNormalizedStatusByIndex[${index}]}" )"
@@ -3245,12 +3273,16 @@ function buildInspectItemsJSONArray() {
 function buildInspectConfigJSON() {
 
     local inspectHighlightColor="#F69325"
+    local inspectWindowHeight="750"
+    local inspectWindowWidth="975"
 
     printf '%s' "{"
     printf '%s' "\"preset\":\"6\","
     printf '%s' "\"title\":$( jsonString "$( getInspectWindowTitle )" ),"
     printf '%s' "\"highlightColor\":$( jsonString "${inspectHighlightColor}" ),"
-    printf '%s' "\"items\":$( buildInspectItemsJSONArray )"
+    printf '%s' "\"items\":$( buildInspectItemsJSONArray ),"
+    printf '%s' "\"height\":${inspectWindowHeight},"
+    printf '%s' "\"width\":${inspectWindowWidth}"
     printf '%s' "}"
 
 }
@@ -3265,6 +3297,8 @@ function validateInspectConfigFile() {
         and (.title | length > 0)
         and (.highlightColor | type == "string")
         and (.highlightColor | length > 0)
+        and (.height == 750)
+        and (.width == 975)
         and (.items | type == "array")
         and (.items | length >= 3)
         and all(.items[];
@@ -3702,7 +3736,7 @@ function quitScript() {
     if [[ -n "${overallHealth}" ]]; then
         if [[ "${operationMode}" != "Silent" ]]; then
             dialogUpdate "icon: SF=xmark.circle, weight=bold, colour1=#BB1717, colour2=#F31F1F"
-            dialogUpdate "title: Computer Unhealthy <br>as of $( date '+%d-%b-%Y %H:%M:%S' )"
+            dialogUpdate "title: Computer Unhealthy <br>as of $( date '+%A, %B %d at %I:%M %p %Z' )"
             displayFailureNotification
         fi
         if [[ -n "${webhookURL}" ]]; then
@@ -3715,7 +3749,7 @@ function quitScript() {
     else
         if [[ "${operationMode}" != "Silent" ]]; then
             dialogUpdate "icon: SF=checkmark.circle, weight=bold, colour1=#00ff44, colour2=#075c1e"
-            dialogUpdate "title: Computer Healthy <br>as of $( date '+%d-%b-%Y %H:%M:%S' )"
+            dialogUpdate "title: Computer Healthy <br>as of $( date '+%A, %B %d at %I:%M %p %Z' )"
         fi
     fi
 
@@ -4009,7 +4043,7 @@ function checkOS() {
     local footerStatusColor="${statusColorSuccess}"
     notice "Check ${humanReadableCheckName} …"
 
-    dialogUpdate "icon: SF=pencil.and.list.clipboard,${organizationColorScheme}"
+    dialogUpdate "icon: SF=desktopcomputer.and.macbook,${organizationColorScheme}"
     dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill $(echo "${organizationColorScheme}" | tr ',' ' '), iconalpha: 1, status: wait, statustext: Checking …"
     dialogUpdate "progress: increment"
     dialogUpdate "progresstext: Comparing installed OS version with compliant version …"
@@ -4176,7 +4210,7 @@ function checkOS() {
 
     fi
 
-    dialogUpdate "icon: SF=pencil.and.list.clipboard,weight=semibold,colour=${footerStatusColor}"
+    dialogUpdate "icon: SF=desktopcomputer.and.macbook,weight=semibold,colour=${footerStatusColor}"
     sleep $((anticipationDuration / 2))
 
 }
@@ -4562,7 +4596,7 @@ function checkAvailableSoftwareUpdates() {
     local footerStatusColor="${statusColorSuccess}"
     notice "Check ${humanReadableCheckName} …"
 
-    dialogUpdate "icon: SF=arrow.trianglehead.2.clockwise,${organizationColorScheme}"
+    dialogUpdate "icon: SF=arrow.down.circle.dotted,${organizationColorScheme}"
     dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill $(echo "${organizationColorScheme}" | tr ',' ' '), iconalpha: 1, status: wait, statustext: Checking …"
     dialogUpdate "progress: increment"
     dialogUpdate "progresstext: Determining ${humanReadableCheckName} status …"
@@ -4672,7 +4706,7 @@ function checkAvailableSoftwareUpdates() {
 
     fi
 
-    dialogUpdate "icon: SF=arrow.trianglehead.2.clockwise,weight=semibold,colour=${footerStatusColor}"
+    dialogUpdate "icon: SF=arrow.down.circle.dotted,weight=semibold,colour=${footerStatusColor}"
     sleep $((anticipationDuration / 2))
 
 }
@@ -5571,11 +5605,11 @@ function checkMdmCertificateExpiration() {
 function checkJamfProCheckIn() {
 
     local humanReadableCheckName="Last Jamf Pro check-in"
-    local footerCheckIcon="SF=dot.radiowaves.left.and.right"
+    local footerCheckIcon="SF=arrow.left.arrow.right.circle"
     local footerStatusColor="${statusColorSuccess}"
     notice "Checking ${humanReadableCheckName} …"
 
-    dialogUpdate "icon: SF=dot.radiowaves.left.and.right,${organizationColorScheme}"
+    dialogUpdate "icon: SF=arrow.left.arrow.right.circle,${organizationColorScheme}"
     dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill $(echo "${organizationColorScheme}" | tr ',' ' '), iconalpha: 1, status: wait, statustext: Checking …"
     dialogUpdate "progress: increment"
     dialogUpdate "progresstext: Determining ${humanReadableCheckName} …"
@@ -5704,11 +5738,11 @@ function checkJamfProInventory() {
 function checkMosyleCheckIn() {
 
     local humanReadableCheckName="Last Mosyle check-in"
-    local footerCheckIcon="SF=dot.radiowaves.left.and.right"
+    local footerCheckIcon="SF=arrow.left.arrow.right.circle"
     local footerStatusColor="${statusColorSuccess}"
     notice "Checking ${humanReadableCheckName} …"
 
-    dialogUpdate "icon: SF=dot.radiowaves.left.and.right,${organizationColorScheme}"
+    dialogUpdate "icon: SF=arrow.left.arrow.right.circle,${organizationColorScheme}"
     dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill $(echo "${organizationColorScheme}" | tr ',' ' '), iconalpha: 1, status: wait, statustext: Checking …"
     dialogUpdate "progress: increment"
     dialogUpdate "progresstext: Determining ${humanReadableCheckName} …"
@@ -5847,12 +5881,14 @@ function checkInternal() {
 
         dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: Installed"
         info "${checkInternalTargetFileDisplayName} installed"
+        footerCheckIcon="SF=checkmark.circle"
         
     else
 
         dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorFail}, iconalpha: 1, subtitle: Visit the ${organizationSelfServiceMarketingName} to install ${checkInternalTargetFileDisplayName}, status: fail, statustext: NOT Installed"
         errorOut "${checkInternalTargetFileDisplayName} NOT Installed"
         overallHealth+="${checkInternalTargetFileDisplayName}; "
+        footerCheckIcon="SF=xmark.circle"
         footerStatusColor="${statusColorFail}"
 
     fi
@@ -5988,35 +6024,41 @@ function checkVPN() {
             dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorFail}, iconalpha: 1, subtitle: Please contact ${supportTeamName}, status: fail, statustext: Failed"
             errorOut "${vpnAppName} Failed"
             overallHealth+="${vpnAppName}; "
+            footerCheckIcon="SF=xmark.circle"
             footerStatusColor="${statusColorFail}"
             ;;
 
         *"Idle"* )
             dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorError}, iconalpha: 1, status: error, statustext: Idle"
             info "${vpnAppName} idle"
+            footerCheckIcon="SF=exclamationmark.triangle.fill"
             footerStatusColor="${statusColorError}"
             ;;
 
         "Connected"* | "${ciscoVPNIP}" )
             dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: Connected"
             info "${vpnAppName} Connected"
+            footerCheckIcon="SF=checkmark.circle"
             ;;
 
         "Disconnected" )
             dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorError}, iconalpha: 1, status: error, statustext: Disconnected"
             info "${vpnAppName} Disconnected"
+            footerCheckIcon="SF=xmark.circle"
             footerStatusColor="${statusColorError}"
             ;;
 
         "None" )
             dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorError}, iconalpha: 1, status: error, statustext: No VPN"
             info "No VPN"
+            footerCheckIcon="SF=xmark.circle"
             footerStatusColor="${statusColorError}"
             ;;
 
         * )
             dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorError}, iconalpha: 1, status: error, statustext: Unknown"
             info "${vpnAppName} Unknown"
+            footerCheckIcon="SF=xmark.circle"
             footerStatusColor="${statusColorError}"
             ;;
 
@@ -6069,18 +6111,21 @@ function checkExternalJamfPro() {
                 dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorFail}, iconalpha: 1, status: fail, statustext: $checkStatus"
                 errorOut "${appDisplayName} Failed"
                 overallHealth+="${appDisplayName}; "
+                footerCheckIcon="SF=xmark.circle"
                 footerStatusColor="${statusColorFail}"
                 ;;
 
             "success" )
                 dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: $checkStatus"
                 info "${appDisplayName} $checkStatus"
+                footerCheckIcon="SF=checkmark.circle"
                 ;;
 
             "error" | * )
                 dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorError}, iconalpha: 1, status: error, statustext: $checkStatus:$checkExtended"
                 errorOut "${appDisplayName} Error:$checkExtended"
                 overallHealth+="${appDisplayName}; "
+                footerCheckIcon="SF=exclamationmark.triangle.fill"
                 footerStatusColor="${statusColorError}"
                 ;;
 
@@ -6095,18 +6140,21 @@ function checkExternalJamfPro() {
                 dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorFail}, iconalpha: 1, subtitle: Please contact ${supportTeamName}, status: fail, statustext: Failed"
                 errorOut "${appDisplayName} Failed"
                 overallHealth+="${appDisplayName}; "
+                footerCheckIcon="SF=xmark.circle"
                 footerStatusColor="${statusColorFail}"
                 ;;
 
             *"running"* )
                 dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: Running"
                 info "${appDisplayName} running"
+                footerCheckIcon="SF=checkmark.circle"
                 ;;
 
             *"error"* | * )
                 dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorError}, iconalpha: 1, status: error, statustext: Error"
                 errorOut "${appDisplayName} Error"
                 overallHealth+="${appDisplayName}; "
+                footerCheckIcon="SF=exclamationmark.triangle.fill"
                 footerStatusColor="${statusColorError}"
                 ;;
 
@@ -6715,7 +6763,7 @@ function updateComputerInventory() {
 
     fi
 
-    dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: Latest computer inventory submitted at $( date '+%d-%b-%Y %H:%M:%S' ), status: success, statustext: Updated"
+    dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: Latest computer inventory submitted at $( date '+%A, %B %d at %I:%M %p %Z' ), status: success, statustext: Updated"
 
 }
 
