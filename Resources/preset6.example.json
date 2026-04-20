@@ -6,8 +6,8 @@
       "guidanceContent": [
         {
           "content": "Mac Health Check Flow",
-          "phases": ["Full Check Complete", "Report Written", "Summary Available", "Cached Report Expires"],
-          "currentPhase": 4,
+          "phases": ["Checks Complete", "Report Written", "Summary Available", "Cached Report Expires"],
+          "currentPhase": 3,
           "style": "stepper",
           "type": "phase-tracker"
         },
@@ -33,7 +33,7 @@
           "type": "info"
         }
       ],
-      "guidanceTitle": "Mac Health Check Results",
+      "guidanceTitle": "Results Overview",
       "icon": "https://usw2.ics.services.jamfcloud.com/icon/hash_08f287b1d7a9da36b733c0784031a4943bef3b82a2981eb937ab2f5b2bd55e91",
       "id": "overview"
     },
@@ -238,10 +238,42 @@
       "guidanceTitle": "Help & Support",
       "icon": "https://usw2.ics.services.jamfcloud.com/icon/hash_08f287b1d7a9da36b733c0784031a4943bef3b82a2981eb937ab2f5b2bd55e91",
       "id": "help"
+    },
+        {
+      "displayName": "Next Steps",
+      "guidanceContent": [
+        {
+          "content": "Mac Health Check Flow",
+          "phases": ["Checks Complete", "Report Written", "Summary Available", "Cached Report Expires"],
+          "currentPhase": 4,
+          "style": "stepper",
+          "type": "phase-tracker"
+        },
+        {
+          "content": "Click **Finish** to close this report, which is cached until <humanReadableDuration>.",
+          "type": "info"
+        },
+        {
+          "content": "Results as of: <date>",
+          "comparisonStyle": "columns",
+          "expectedLabel": "Healthy",
+          "expected": "34 checks passed",
+          "expectedColor": "#34C759",
+          "expectedIcon": "checkmark.shield",
+          "actualLabel": "Unhealthy",
+          "actual": "4 checks need attention",
+          "actualColor": "#FF3B30",
+          "actualIcon": "exclamationmark.shield.fill",
+          "type": "comparison-table"
+        },
+      ],
+      "guidanceTitle": "Next Steps",
+      "icon": "https://usw2.ics.services.jamfcloud.com/icon/hash_08f287b1d7a9da36b733c0784031a4943bef3b82a2981eb937ab2f5b2bd55e91",
+      "id": "nextSteps"
     }
   ],
   "preset": "6",
-  "title": "Mac Health Check (4.0.0b10)",
+  "title": "Mac Health Check (4.0.0b11)",
   "height": 750,
   "width": 975
 }

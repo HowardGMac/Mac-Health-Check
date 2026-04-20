@@ -17,12 +17,14 @@
 #
 # HISTORY
 #
-# Version 4.0.0b10, 17-Apr-2026, Dan K. Snelson (@dan-snelson)
+# Version 4.0.0b11, 20-Apr-2026, Dan K. Snelson (@dan-snelson)
 # - Added JSON health reporting (with optional Splunk HTTP Event Collector (HEC) delivery)
 # - Added a stand-alone swiftDialog Inspect Mode-flavored report (i.e., `inspectSummaryPreset="on"`), plus cached replay (i.e., `inspectReplayMaximumAgeSeconds`) for `Self Service` runs
 # - Refactored `checkElectronCornerMask` to reduce execution time
 # - Many quality-of-life user-interface improvements
 # - Raised the minimum required swiftDialog version to `3.1.0.4976`
+# - Refactored `checkHomebrewStatus()` to more accurately reflect Homebrew's actual installation status
+# - Added "Next Steps" to Inspect Mode-flavored report
 #
 ####################################################################################################
 
@@ -37,7 +39,7 @@
 export PATH=/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin/
 
 # Script Version
-scriptVersion="4.0.0b10"
+scriptVersion="4.0.0b11"
 
 # Client-side Log
 scriptLog="/var/log/org.churchofjesuschrist.log"
@@ -1492,7 +1494,7 @@ fi
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 function updateScriptLog() {
-    echo "${organizationScriptName} ($scriptVersion): $( date '+%A, %B %d at %I:%M %p %Z' ) - ${1}" | tee -a "${scriptLog}"
+    echo "${organizationScriptName} ($scriptVersion): $( date +%Y-%m-%d\ %H:%M:%S ) - ${1}" | tee -a "${scriptLog}"
 }
 
 function preFlight()    { updateScriptLog "[PRE-FLIGHT]      ${1}"; }
@@ -1690,6 +1692,30 @@ function runAsUser() {
 
     info "Run \"$@\" as \"$loggedInUserID\" … " 1>&2
     launchctl asuser "$loggedInUserID" sudo -u "$loggedInUser" "$@"
+
+}
+
+function runHomebrewAsUser() {
+
+    local brewBinary="${1}"
+    shift
+    local homebrewPath="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+
+    info "Run Homebrew \"${brewBinary} $*\" as \"${loggedInUserID}\" … " 1>&2
+    launchctl asuser "${loggedInUserID}" sudo -H -u "${loggedInUser}" env \
+        HOME="${loggedInUserHomeDirectory}" \
+        USER="${loggedInUser}" \
+        LOGNAME="${loggedInUser}" \
+        PATH="${homebrewPath}" \
+        zsh -lc '
+            export HOME="$1"
+            export USER="$2"
+            export LOGNAME="$2"
+            export PATH="$3"
+            export HOMEBREW_NO_AUTO_UPDATE=1
+            shift 3
+            "$@"
+        ' zsh "${loggedInUserHomeDirectory}" "${loggedInUser}" "${homebrewPath}" "${brewBinary}" "$@"
 
 }
 
@@ -2914,7 +2940,7 @@ function getInspectCheckSymbolByIndex() {
             echo "desktopcomputer"
             ;;
         *downloads* )
-            echo "folder"
+            echo "folder.fill.badge.plus"
             ;;
         *trash* )
             echo "trash"
@@ -3010,15 +3036,33 @@ function buildInspectComparisonEntriesJSONFromTitles() {
 
 }
 
-function buildInspectOverviewGuidanceContentJSON() {
+function buildInspectSummaryComparisonTableJSON() {
 
     local healthyCount="${#reportHealthyChecks[@]}"
     local unhealthyCount="$( getInspectUnhealthyCount )"
 
+    printf '%s' "{"
+    printf '%s' "\"content\":$( jsonString "$( getInspectResultsTimestampText )" ),"
+    printf '%s' "\"comparisonStyle\":\"columns\","
+    printf '%s' "\"expectedLabel\":\"Healthy\","
+    printf '%s' "\"expected\":$( jsonString "${healthyCount} checks passed" ),"
+    printf '%s' "\"expectedColor\":\"#34C759\","
+    printf '%s' "\"expectedIcon\":\"checkmark.shield\","
+    printf '%s' "\"actualLabel\":\"Unhealthy\","
+    printf '%s' "\"actual\":$( jsonString "${unhealthyCount} checks need attention" ),"
+    printf '%s' "\"actualColor\":$( jsonString "$( getInspectStatusColor "${reportOverallStatus}" )" ),"
+    printf '%s' "\"actualIcon\":$( jsonString "$( getInspectStatusIcon "${reportOverallStatus}" )" ),"
+    printf '%s' "\"type\":\"comparison-table\""
+    printf '%s' "}"
+
+}
+
+function buildInspectOverviewGuidanceContentJSON() {
+
     printf '%s' "["
-    printf '%s' "{\"content\":\"Mac Health Check Flow\",\"phases\":[\"Full Check Complete\",\"Report Written\",\"Summary Available\",\"Cached Report Expires\"],\"currentPhase\":4,\"style\":\"stepper\",\"type\":\"phase-tracker\"},"
+    printf '%s' "{\"content\":\"Mac Health Check Flow\",\"phases\":[\"Checks Complete\",\"Report Written\",\"Summary Available\",\"Cached Report Expires\"],\"currentPhase\":3,\"style\":\"stepper\",\"type\":\"phase-tracker\"},"
     printf '%s' "{\"content\":$( jsonString "$( getInspectIntroductionText )" ),\"type\":\"text\"},"
-    printf '%s' "{\"content\":$( jsonString "$( getInspectResultsTimestampText )" ),\"comparisonStyle\":\"columns\",\"expectedLabel\":\"Healthy\",\"expected\":$( jsonString "${healthyCount} checks passed" ),\"expectedColor\":\"#34C759\",\"expectedIcon\":\"checkmark.shield\",\"actualLabel\":\"Unhealthy\",\"actual\":$( jsonString "${unhealthyCount} checks need attention" ),\"actualColor\":$( jsonString "$( getInspectStatusColor "${reportOverallStatus}" )" ),\"actualIcon\":$( jsonString "$( getInspectStatusIcon "${reportOverallStatus}" )" ),\"type\":\"comparison-table\"},"
+    printf '%s' "$( buildInspectSummaryComparisonTableJSON ),"
     printf '%s' "{\"content\":$( jsonString "$( getInspectReplayExpirationMessage )" ),\"type\":\"info\"}"
     printf '%s' "]"
 
@@ -3108,6 +3152,12 @@ function getInspectReplayExpirationMessage() {
     else
         echo "These cached results may be reused for up to ${replayMinutes} minutes before they are refreshed."
     fi
+
+}
+
+function getInspectNextStepsText() {
+
+    echo "Click **Finish** to close this report. $( getInspectReplayExpirationMessage )"
 
 }
 
@@ -3244,13 +3294,23 @@ function buildInspectHelpGuidanceContentJSON() {
 
 }
 
+function buildInspectNextStepsGuidanceContentJSON() {
+
+    printf '%s' "["
+    printf '%s' "{\"content\":\"Mac Health Check Flow\",\"phases\":[\"Checks Complete\",\"Report Written\",\"Summary Available\",\"Cached Report Expires\"],\"currentPhase\":4,\"style\":\"stepper\",\"type\":\"phase-tracker\"},"
+    printf '%s' "{\"content\":$( jsonString "$( getInspectNextStepsText )" ),\"type\":\"info\"},"
+    printf '%s' "$( buildInspectSummaryComparisonTableJSON )"
+    printf '%s' "]"
+
+}
+
 function buildInspectItemsJSONArray() {
 
     local sectionIcon="$( getInspectSectionIcon )"
     local separator=""
 
     printf '%s' "["
-    printf '%s' "{\"displayName\":\"Overview\",\"guidanceContent\":$( buildInspectIntroductionGuidanceContentJSON ),\"guidanceTitle\":\"Mac Health Check Results\",\"icon\":$( jsonString "${sectionIcon}" ),\"id\":\"overview\"}"
+    printf '%s' "{\"displayName\":\"Overview\",\"guidanceContent\":$( buildInspectIntroductionGuidanceContentJSON ),\"guidanceTitle\":\"Results Overview\",\"icon\":$( jsonString "${sectionIcon}" ),\"id\":\"overview\"}"
     separator=","
 
     if inspectUnhealthyResultsExist; then
@@ -3266,6 +3326,7 @@ function buildInspectItemsJSONArray() {
     fi
 
     printf '%s' "${separator}{\"displayName\":\"Help & Support\",\"guidanceContent\":$( buildInspectHelpGuidanceContentJSON ),\"guidanceTitle\":\"Help & Support\",\"icon\":$( jsonString "${sectionIcon}" ),\"id\":\"help\"}"
+    printf '%s' "${separator}{\"displayName\":\"Next Steps\",\"guidanceContent\":$( buildInspectNextStepsGuidanceContentJSON ),\"guidanceTitle\":\"Next Steps\",\"icon\":$( jsonString "${sectionIcon}" ),\"id\":\"nextSteps\"}"
     printf '%s' "]"
 
 }
@@ -6259,6 +6320,7 @@ function checkHomebrewStatus() {
     local installedHomebrewVersion=""
     local latestHomebrewVersion=""
     local latestHomebrewResponse=""
+    local homebrewOutdatedJSON=""
     local outdatedFormulaeCount=""
     local outdatedCasksCount=""
     notice "Check ${humanReadableCheckName} …"
@@ -6278,7 +6340,7 @@ function checkHomebrewStatus() {
         dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: Optional tool not detected on this Mac, status: success, statustext: Not installed"
         info "${humanReadableCheckName}: Not installed"
     else
-        installedHomebrewVersion=$( runAsUser env HOMEBREW_NO_AUTO_UPDATE=1 "${brewBinary}" --version 2>/dev/null | awk '/^Homebrew / { print $2; exit }' )
+        installedHomebrewVersion=$( runHomebrewAsUser "${brewBinary}" --version 2>/dev/null | awk '/^Homebrew / { print $2; exit }' )
         latestHomebrewResponse=$( curl -fsL --connect-timeout 5 --max-time 10 "https://api.github.com/repos/Homebrew/brew/releases/latest" 2>/dev/null )
 
         if [[ -n "${latestHomebrewResponse}" ]]; then
@@ -6286,8 +6348,15 @@ function checkHomebrewStatus() {
             [[ "${latestHomebrewVersion}" == "undefined" ]] && latestHomebrewVersion=""
         fi
 
-        outdatedFormulaeCount=$( runAsUser env HOMEBREW_NO_AUTO_UPDATE=1 "${brewBinary}" outdated --formula --quiet 2>/dev/null | sed '/^$/d' | wc -l | tr -d ' ' )
-        outdatedCasksCount=$( runAsUser env HOMEBREW_NO_AUTO_UPDATE=1 "${brewBinary}" outdated --cask --quiet 2>/dev/null | sed '/^$/d' | wc -l | tr -d ' ' )
+        homebrewOutdatedJSON=$( runHomebrewAsUser "${brewBinary}" outdated --json=v2 2>/dev/null )
+
+        if [[ -n "${homebrewOutdatedJSON}" ]] && validateJson "${homebrewOutdatedJSON}" && jsonIsObject "${homebrewOutdatedJSON}"; then
+            outdatedFormulaeCount=$( printf '%s' "${homebrewOutdatedJSON}" | jq -r '(.formulae // []) | length' 2>/dev/null )
+            outdatedCasksCount=$( printf '%s' "${homebrewOutdatedJSON}" | jq -r '(.casks // []) | length' 2>/dev/null )
+        else
+            outdatedFormulaeCount=$( runHomebrewAsUser "${brewBinary}" outdated --formula --quiet 2>/dev/null | sed '/^$/d' | wc -l | tr -d ' ' )
+            outdatedCasksCount=$( runHomebrewAsUser "${brewBinary}" outdated --cask --quiet 2>/dev/null | sed '/^$/d' | wc -l | tr -d ' ' )
+        fi
 
         if [[ -z "${installedHomebrewVersion}" ]] || [[ -z "${latestHomebrewVersion}" ]] || [[ "${outdatedFormulaeCount}" != <-> ]] || [[ "${outdatedCasksCount}" != <-> ]]; then
             dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorError}, iconalpha: 1, subtitle: Homebrew was found but could not be fully evaluated, status: error, statustext: Unable to determine"
@@ -6969,7 +7038,7 @@ else
                 checkUptime "10"
                 checkFreeDiskSpace "11"
                 checkUserDirectorySizeItems "12" "Desktop" "desktopcomputer.and.macbook" "Desktop"
-                checkUserDirectorySizeItems "13" "Downloads" "arrow.down.circle.fill" "Downloads"
+                checkUserDirectorySizeItems "13" "Downloads" "folder.fill.badge.plus" "Downloads"
                 checkUserDirectorySizeItems "14" ".Trash" "trash.fill" "Trash"
                 checkPasswordHint "15"
                 checkAirDropSettings "16"
@@ -7003,7 +7072,7 @@ else
                 checkUptime "10"
                 checkFreeDiskSpace "11"
                 checkUserDirectorySizeItems "12" "Desktop" "desktopcomputer.and.macbook" "Desktop"
-                checkUserDirectorySizeItems "13" "Downloads" "arrow.down.circle.fill" "Downloads"
+                checkUserDirectorySizeItems "13" "Downloads" "folder.fill.badge.plus" "Downloads"
                 checkUserDirectorySizeItems "14" ".Trash" "trash.fill" "Trash"
                 checkPasswordHint "15"
                 checkAirDropSettings "16"
@@ -7036,7 +7105,7 @@ else
                 checkUptime "10"
                 checkFreeDiskSpace "11"
                 checkUserDirectorySizeItems "12" "Desktop" "desktopcomputer.and.macbook" "Desktop"
-                checkUserDirectorySizeItems "13" "Downloads" "arrow.down.circle.fill" "Downloads"
+                checkUserDirectorySizeItems "13" "Downloads" "folder.fill.badge.plus" "Downloads"
                 checkUserDirectorySizeItems "14" ".Trash" "trash.fill" "Trash"
                 checkPasswordHint "15"
                 checkAirDropSettings "16"
@@ -7072,7 +7141,7 @@ else
                 checkUptime "12"
                 checkFreeDiskSpace "13"
                 checkUserDirectorySizeItems "14" "Desktop" "desktopcomputer.and.macbook" "Desktop"
-                checkUserDirectorySizeItems "15" "Downloads" "arrow.down.circle.fill" "Downloads"
+                checkUserDirectorySizeItems "15" "Downloads" "folder.fill.badge.plus" "Downloads"
                 checkUserDirectorySizeItems "16" ".Trash" "trash.fill" "Trash"
                 checkMdmProfile "17"
                 checkMdmCertificateExpiration "18"
@@ -7111,7 +7180,7 @@ else
                 checkUptime "10"
                 checkFreeDiskSpace "11"
                 checkUserDirectorySizeItems "12" "Desktop" "desktopcomputer.and.macbook" "Desktop"
-                checkUserDirectorySizeItems "13" "Downloads" "arrow.down.circle.fill" "Downloads"
+                checkUserDirectorySizeItems "13" "Downloads" "folder.fill.badge.plus" "Downloads"
                 checkUserDirectorySizeItems "14" ".Trash" "trash.fill" "Trash"
                 checkPasswordHint "15"
                 checkAirDropSettings "16"
@@ -7145,7 +7214,7 @@ else
                 checkUptime "10"
                 checkFreeDiskSpace "11"
                 checkUserDirectorySizeItems "12" "Desktop" "desktopcomputer.and.macbook" "Desktop"
-                checkUserDirectorySizeItems "13" "Downloads" "arrow.down.circle.fill" "Downloads"
+                checkUserDirectorySizeItems "13" "Downloads" "folder.fill.badge.plus" "Downloads"
                 checkUserDirectorySizeItems "14" ".Trash" "trash.fill" "Trash"
                 checkPasswordHint "15"
                 checkAirDropSettings "16"
@@ -7179,7 +7248,7 @@ else
                 checkUptime "10"
                 checkFreeDiskSpace "11"
                 checkUserDirectorySizeItems "12" "Desktop" "desktopcomputer.and.macbook" "Desktop"
-                checkUserDirectorySizeItems "13" "Downloads" "arrow.down.circle.fill" "Downloads"
+                checkUserDirectorySizeItems "13" "Downloads" "folder.fill.badge.plus" "Downloads"
                 checkUserDirectorySizeItems "14" ".Trash" "trash.fill" "Trash"
                 checkPasswordHint "15"
                 checkAirDropSettings "16"
@@ -7213,7 +7282,7 @@ else
                 checkUptime "10"
                 checkFreeDiskSpace "11"
                 checkUserDirectorySizeItems "12" "Desktop" "desktopcomputer.and.macbook" "Desktop"
-                checkUserDirectorySizeItems "13" "Downloads" "arrow.down.circle.fill" "Downloads"
+                checkUserDirectorySizeItems "13" "Downloads" "folder.fill.badge.plus" "Downloads"
                 checkUserDirectorySizeItems "14" ".Trash" "trash.fill" "Trash"
                 checkPasswordHint "15"
                 checkAirDropSettings "16"
@@ -7247,7 +7316,7 @@ else
                 checkUptime "9"
                 checkFreeDiskSpace "10"
                 checkUserDirectorySizeItems "11" "Desktop" "desktopcomputer.and.macbook" "Desktop"
-                checkUserDirectorySizeItems "12" "Downloads" "arrow.down.circle.fill" "Downloads"
+                checkUserDirectorySizeItems "12" "Downloads" "folder.fill.badge.plus" "Downloads"
                 checkUserDirectorySizeItems "13" ".Trash" "trash.fill" "Trash"
                 checkPasswordHint "14"
                 checkAirDropSettings "15"
