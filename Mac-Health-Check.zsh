@@ -17,7 +17,7 @@
 #
 # HISTORY
 #
-# Version 4.0.0b12, 21-Apr-2026, Dan K. Snelson (@dan-snelson)
+# Version 4.0.0b14, 21-Apr-2026, Dan K. Snelson (@dan-snelson)
 # - Added JSON health reporting (with optional Splunk HTTP Event Collector (HEC) delivery)
 # - Added a stand-alone swiftDialog Inspect Mode-flavored report (i.e., `inspectSummaryPreset="on"`), plus cached replay (i.e., `inspectReplayMaximumAgeSeconds`) for `Self Service` runs
 # - Refactored `checkElectronCornerMask` to reduce execution time
@@ -26,6 +26,7 @@
 # - Refactored `checkHomebrewStatus()` to more accurately reflect Homebrew's actual installation status
 # - Added "Next Steps" to Inspect Mode-flavored report
 # - Added `checkWiFiStrength()`; thanks, @kgolden-code!
+# - Refactored `displayFailureNotification()` to allow users to view the Inspect Mode-flavored report
 #
 ####################################################################################################
 
@@ -40,7 +41,7 @@
 export PATH=/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin/
 
 # Script Version
-scriptVersion="4.0.0b12"
+scriptVersion="4.0.0b14"
 
 # Client-side Log
 scriptLog="/var/log/org.churchofjesuschrist.log"
@@ -82,11 +83,14 @@ splunkHECURL="${7:-""}"
 # Parameter 8: Splunk HEC Token [ Leave blank to disable (default) ]
 splunkHECToken="${8:-""}"
 
-# Parameter 9: Custom JSON fields object to merge into the report's `customFields`
-customReportFieldsJSON="${9:-""}"
+# Parameter 9: Splunk HEC Index
+splunkHECIndex="${9:-""}"
 
-# Parameter 10: Reporting debug mode [ true | false ]
-reportDebug="${10:-"false"}"
+# Parameter 10: Splunk HEC Sourcetype
+splunkHECSourcetype="${10:-""}"
+
+# Parameter 11: Reporting debug mode [ true | false ]
+reportDebug="${11:-"false"}"
 
 
 
@@ -190,6 +194,7 @@ completionTimer="60"
 inspectSummaryPreset="on"
 inspectConfigPath="/var/tmp/MacHealthCheck-Inspect-Config.json"
 inspectLaunchLogPath="/var/tmp/MacHealthCheck-Inspect-Summary.log"
+failureNotificationActionScriptPath="/var/tmp/MacHealthCheck-Inspect-Action.zsh"
 inspectReplayMaximumAgeSeconds="900" # 15 minutes
 
 # Splunk and JSON reporting defaults
@@ -197,9 +202,6 @@ splunkJSONReportPath="/var/tmp/MacHealthCheck-Report.json"
 splunkPrettyPrintJSON="false"
 splunkReportDebug="false"
 splunkAllowInsecureTLS="false"
-splunkHECSource="Mac-Health-Check.zsh"
-splunkHECSourcetype="mac_health_check:json"
-customFieldsJSON="{}"
 
 # Result-collection defaults
 reportingErrorCount=0
@@ -2229,8 +2231,7 @@ function buildMacHealthReportJSON() {
     printf '%s' "\"summary\":${summaryJSON},"
     printf '%s' "\"systemInfo\":${systemInfoJSON},"
     printf '%s' "\"mdm\":${mdmJSON},"
-    printf '%s' "\"checks\":${checksJSON},"
-    printf '%s' "\"customFields\":${customFieldsJSON}"
+    printf '%s' "\"checks\":${checksJSON}"
     printf '%s' "}"
 
 }
@@ -2262,8 +2263,7 @@ function buildFallbackReportJSON() {
     printf '%s' "},"
     printf '%s' "\"systemInfo\":{},"
     printf '%s' "\"mdm\":{},"
-    printf '%s' "\"checks\":[],"
-    printf '%s' "\"customFields\":{}"
+    printf '%s' "\"checks\":[]"
     printf '%s' "}"
 
 }
@@ -2318,14 +2318,22 @@ function sanitizeSplunkURLForLog() {
 function buildSplunkHECPayload() {
 
     local reportJSON="${1}"
+    local hecPayload="{"
+    local separator=""
 
-    printf '%s' "{"
-    printf '%s' "\"time\":${reportTimestampEpoch},"
-    printf '%s' "\"host\":$( jsonString "${hostName}" ),"
-    printf '%s' "\"source\":$( jsonString "${splunkHECSource}" ),"
-    printf '%s' "\"sourcetype\":$( jsonString "${splunkHECSourcetype}" ),"
-    printf '%s' "\"event\":${reportJSON}"
-    printf '%s' "}"
+    if [[ -n "${splunkHECSourcetype}" ]]; then
+        hecPayload+="\"sourcetype\":$( jsonString "${splunkHECSourcetype}" )"
+        separator=","
+    fi
+
+    if [[ -n "${splunkHECIndex}" ]]; then
+        hecPayload+="${separator}\"index\":$( jsonString "${splunkHECIndex}" )"
+        separator=","
+    fi
+
+    hecPayload+="${separator}\"event\":${reportJSON}}"
+
+    printf '%s' "${hecPayload}"
 
 }
 
@@ -2359,7 +2367,7 @@ function sendSplunkHECPayload() {
             curl --silent --fail-with-body --max-time 15 \
                 --header "Authorization: Splunk ${splunkHECToken}" \
                 --header "Content-Type: application/json" \
-                --data "@${payloadFile}" \
+                --data-binary "@${payloadFile}" \
                 --output "${responseFile}" \
                 --write-out "%{http_code}" \
                 "${curlArgs[@]}" \
@@ -2405,17 +2413,6 @@ function generateAndSendSplunkReport() {
     rebuildOverallHealthFromRecordedResults
     calculateOverallReportStatus
     generateReportTimestamp
-
-    if [[ -n "${customReportFieldsJSON}" ]]; then
-        if validateJson "${customReportFieldsJSON}" && jsonIsObject "${customReportFieldsJSON}"; then
-            customFieldsJSON="$( compactJson "${customReportFieldsJSON}" )"
-        else
-            customFieldsJSON="{}"
-            warning "Splunk Reporting: customReportFieldsJSON is invalid or not a JSON object; ignoring Parameter 9."
-        fi
-    else
-        customFieldsJSON="{}"
-    fi
 
     reportJSON="$( buildMacHealthReportJSON )"
 
@@ -3752,11 +3749,73 @@ EOF
 # Display Failure Notification (Requires swiftDialog 3.1.0.4970+)
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
+function failureNotificationOffersInspectSummary() {
+
+    [[ "${operationMode}" == "Self Service" ]] && inspectSummaryIsEnabled
+
+}
+
+function getFailureNotificationButtonText() {
+
+    if failureNotificationOffersInspectSummary; then
+        echo "View Details"
+    else
+        echo "Contact Support"
+    fi
+
+}
+
+function prepareFailureNotificationActionScript() {
+
+    local actionScriptPath="${1:-${failureNotificationActionScriptPath}}"
+    local actionScriptContents=""
+
+    actionScriptContents="#!/bin/zsh
+inspectConfigPath=${(q)inspectConfigPath}
+dialogCommand=${(q)dialogBinary}
+fallbackURL=${(q)supportTeamWebsite}
+for attempt in {1..20}; do
+    if [[ -r \"\${inspectConfigPath}\" ]]; then
+        /usr/bin/nohup \"\${dialogCommand}\" --inspect-mode --inspect-config \"\${inspectConfigPath}\" >/dev/null 2>&1 &
+        exit 0
+    fi
+    /bin/sleep 1
+done
+if [[ -n \"\${fallbackURL}\" ]]; then
+    /usr/bin/open \"\${fallbackURL}\"
+fi"
+
+    writeReadableTextFile "${actionScriptPath}" "${actionScriptContents}"
+    chmod 755 "${actionScriptPath}" 2>/dev/null
+
+    [[ -x "${actionScriptPath}" ]]
+
+}
+
+function getFailureNotificationButtonAction() {
+
+    local fallbackURL="${supportTeamWebsite}"
+
+    if ! failureNotificationOffersInspectSummary; then
+        echo "${fallbackURL}"
+        return 0
+    fi
+
+    if prepareFailureNotificationActionScript; then
+        echo "${failureNotificationActionScriptPath}"
+    else
+        echo "${fallbackURL}"
+    fi
+
+}
+
 function displayFailureNotification() {
 
     notice "Displaying failure notification …"
 
     local failureList=""
+    local buttonText="$( getFailureNotificationButtonText )"
+    local buttonAction="$( getFailureNotificationButtonAction )"
     local -a failedItems
     failedItems=( "${(s/; /)overallHealth}" )
     for item in "${failedItems[@]}"; do
@@ -3772,8 +3831,8 @@ function displayFailureNotification() {
         --title "${humanReadableScriptName} Failures" \
         --message "${notificationMessage}" \
         --button1text "Close" \
-        --button2text "Contact Support" \
-        --button2action "${supportTeamWebsite}" &
+        --button2text "${buttonText}" \
+        --button2action "${buttonAction}" &
 
 }
 
@@ -6940,6 +6999,7 @@ if [[ "${operationMode}" == "Development" ]]; then
 
     developmentListitemJSON='
     [
+        {"title" : "AirDrop", "subtitle" : "Ensure AirDrop is not set to Everyone for security", "icon" : "SF=17.circle,'"${organizationColorScheme}"'", "status" : "pending", "statustext" : "Pending …", "iconalpha" : 0.5},
         {"title" : "Wi-Fi Strength", "subtitle" : "Checks current Wi-Fi signal strength and gives a simple quality rating.", "icon" : "SF=31.circle,'"${organizationColorScheme}"'", "status" : "pending", "statustext" : "Pending …", "iconalpha" : 0.5}
     ]
     '
@@ -7085,7 +7145,8 @@ if [[ "${operationMode}" == "Development" ]]; then
     notice "Operation Mode is ${operationMode}; using ${operationMode}-specific Health Check."
     dialogUpdate "title: ${humanReadableScriptName} (${scriptVersion})<br>Operation Mode: ${operationMode}"
     # set -x
-    checkWiFiStrength "0"
+    checkAirDropSettings "0"
+    checkWiFiStrength "1"
     # set +x
 
 else
