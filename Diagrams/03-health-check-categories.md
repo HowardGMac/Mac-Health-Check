@@ -1,6 +1,6 @@
 # Mac Health Check: Health Check Categories
 
-This diagram shows the `4.0.0b11` Mac Health Check runtime inventory organized by category. Each item is listed with its function name and a representative human-readable label shown in the swiftDialog interface.
+This diagram shows the `4.0.0b12` Mac Health Check runtime inventory organized by category. Each item is listed with its function name and a representative human-readable label shown in the swiftDialog interface.
 
 ```mermaid
 graph LR
@@ -77,7 +77,8 @@ graph LR
         N4["checkNetworkHosts()<br>Apple Certificate Validation"]
         N5["checkNetworkHosts()<br>Apple Identity and Content Services"]
         N6["checkNetworkHosts()<br>Jamf Hosts"]
-        N7["checkNetworkQuality()<br>Network Quality Test"]
+        N7["checkWiFiStrength()<br>Wi-Fi Strength"]
+        N8["checkNetworkQuality()<br>Network Quality Test"]
 
         style N1 fill:#c8e6c9
         style N2 fill:#c8e6c9
@@ -86,6 +87,7 @@ graph LR
         style N5 fill:#c8e6c9
         style N6 fill:#c8e6c9
         style N7 fill:#c8e6c9
+        style N8 fill:#c8e6c9
     end
 
     subgraph Apps["📦 Apps"]
@@ -183,10 +185,10 @@ MDM connectivity and certificate health checks. Vendor-specific checks (Jamf Pro
 | `checkMosyleCheckIn()` | Mosyle Check-In | Mosyle only |
 
 ### Network
-Validates reachability to Apple infrastructure and (for Jamf Pro) Jamf Cloud hosts. `checkNetworkQuality()` runs an `networkQuality` speed test, caching results for up to `networkQualityTestMaximumAge` (default: 1 hour) to avoid repeated tests.
+Validates reachability to Apple infrastructure and (for Jamf Pro) Jamf Cloud hosts. `checkWiFiStrength()` measures current RSSI and assigns a simple quality rating, treating Wi-Fi-inactive or Ethernet-primary systems as a non-failure skip. `checkNetworkQuality()` runs a `networkQuality` speed test, caching results for up to `networkQualityTestMaximumAge` (default: 1 hour) to avoid repeated tests.
 
 ### Apps
-Application-specific checks. `checkAppAutoPatch()` validates the App Auto-Patch patching agent. `checkHomebrewStatus()` compares the installed Homebrew release and outdated package counts without auto-updating Homebrew metadata. `checkInternal()` validates the presence of an MDM vendor–specific companion app (e.g., Company Portal for Intune, Self-Service.app for Mosyle).
+Application-specific checks. `checkAppAutoPatch()` validates the App Auto-Patch patching agent where included. `checkHomebrewStatus()` compares the installed Homebrew release and outdated package counts without auto-updating Homebrew metadata. `checkInternal()` validates the presence of MDM vendor–specific companion apps (for example Microsoft Teams, Fleet Desktop, Company Portal, or Self-Service.app). Current Kandji flow leans more heavily on `checkInternal()` companion-app validation and pairs it with `checkWiFiStrength()` instead of `checkAppAutoPatch()`, `checkHomebrewStatus()`, and `checkElectronCornerMask()`.
 
 ### External
 Optional plugin checks for third-party security tools. These require separate MDM policies from the `external-checks/` directory and use a shared defaults domain (`organizationDefaultsDomain`) to pass results to the main script. Available only in Jamf Pro deployments.
@@ -199,4 +201,4 @@ Optional plugin checks for third-party security tools. These require separate MD
 | `symvGlobalProtect` | Palo Alto GlobalProtect | `GlobalProtect.app` |
 
 ### Inventory
-`updateComputerInventory()` is a Jamf Pro-only follow-up action that submits the Mac's latest inventory after the rest of the Jamf-specific check set completes. It is represented as a list item in the UI and appears as the final Jamf Pro step in `4.0.0b11`.
+`updateComputerInventory()` is a Jamf Pro-only follow-up action that submits the Mac's latest inventory after the rest of the Jamf-specific check set completes. It is represented as a list item in the UI and appears as the final Jamf Pro step in `4.0.0b12`.

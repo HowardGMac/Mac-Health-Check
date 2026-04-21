@@ -1,21 +1,22 @@
 # Mac Health Check: Health Check Reference
 
-This text-only reference documents the key configurable defaults and runtime inventory for Mac Health Check `4.0.0b11`. No diagram is included; use [03-health-check-categories.md](03-health-check-categories.md) for a visual overview.
+This text-only reference documents the key configurable defaults and runtime inventory for Mac Health Check `4.0.0b12`. No diagram is included; use [03-health-check-categories.md](03-health-check-categories.md) for a visual overview.
 
 ---
 
-## 4.0.0b11 Runtime Notes
+## 4.0.0b12 Runtime Notes
 
-- `operationMode` is documented for the `4.0.0b11` release as `Self Service` by default, with `Silent`, `Debug`, `Development`, and `Test` also supported.
-- `Self Service` runs now generate a readable inspect-summary config, launch a detached swiftDialog Inspect Mode fixed Preset 6 guided summary after the canonical report is written, separate recorded results into `Unhealthy` and `Healthy` sections, and retain the normal main-dialog completion countdown during full runs.
+- `operationMode` is documented for the `4.0.0b12` release as `Self Service` by default, with `Silent`, `Debug`, `Development`, and `Test` also supported.
+- `Self Service` runs now generate a readable inspect-summary config, launch a detached moveable swiftDialog Inspect Mode Preset 6 guided summary after the canonical report is written, separate recorded results into `Unhealthy` and `Healthy` sections, and retain the normal main-dialog completion countdown during full runs.
 - Re-running in `Self Service` can replay the cached inspect summary immediately when the handoff assets are still valid and younger than `inspectReplayMaximumAgeSeconds`.
-- `Development` mode currently runs `checkHomebrewStatus()` and `checkElectronCornerMask()` instead of the full vendor-specific suite.
+- `Development` mode currently runs only `checkWiFiStrength()` instead of the full vendor-specific suite.
 - `inspectSummaryPreset` is an `on` / `off` toggle: `on` enables the fixed Preset 6 inspect summary and cached replay, while `off` disables both behaviors entirely.
 - Non-`Silent` runs with failures trigger `displayFailureNotification()`, which presents a persistent swiftDialog pseudo-alert summary of failed health checks.
 - Pre-flight requires swiftDialog `3.1.0.4976` or newer.
 - When `enableDockIntegration` is `true`, non-`Silent` runs show a Dock icon with a decreasing `dockiconbadge` count.
 - `checkAvailableSoftwareUpdates()` includes deferred and DDM-enforced OS update handling.
 - `checkFreeDiskSpace()` prefers Finder-aligned available capacity and falls back to `diskutil info /` when needed.
+- `checkWiFiStrength()` uses `wdutil info` when available, falls back to the legacy `airport` binary, and treats Wi-Fi-inactive / Ethernet-primary systems as a non-failure skip.
 - `checkHomebrewStatus()` compares the installed Homebrew release and local outdated package counts without auto-updating Homebrew metadata.
 - Help and support content is built dynamically from `supportLabelN` / `supportValueN` pairs, with legacy support fields used as a fallback.
 - `updateComputerInventory()` is the final Jamf Pro-specific check in the Jamf Pro check set.
@@ -67,7 +68,7 @@ The support/help experience uses both legacy support fields and dynamic `support
 | `supportLabel1`–`supportLabel6` | Mixed defaults / blanks | Dynamic support labels shown in the help message |
 | `supportValue1`–`supportValue6` | Mixed defaults / blanks | Matching dynamic support values; empty pairs are skipped |
 
-**4.0.0b11 behavior notes**
+**4.0.0b12 behavior notes**
 
 - If all `supportLabelN` / `supportValueN` pairs are blank, the script falls back to the legacy `supportTeam*` and KB values.
 - The first URL-like `supportValueN` becomes the Info button action in the dialog.
@@ -91,17 +92,17 @@ The table below lists every health check function, its human-readable name, and 
 | System | `checkFirewall()` | Firewall | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | System | `checkFileVault()` | FileVault | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | User | `checkTouchID()` | Touch ID | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| User | `checkAirDropSettings()` | AirDrop | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| User | `checkAirPlayReceiver()` | AirPlay Receiver | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| User | `checkAirDropSettings()` | AirDrop | ✅ | ✅ | ✅ | ✅ | ✅ | — | ✅ | ✅ | ✅ |
+| User | `checkAirPlayReceiver()` | AirPlay Receiver | ✅ | ✅ | ✅ | ✅ | ✅ | — | ✅ | ✅ | ✅ |
 | User | `checkBluetoothSharing()` | Bluetooth Sharing | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| User | `checkPasswordHint()` | Password Hint | ✅ | ✅ | ✅ | — | ✅ | ✅ | ✅ | ✅ | ✅ |
+| User | `checkPasswordHint()` | Password Hint | ✅ | ✅ | ✅ | — | ✅ | — | ✅ | ✅ | ✅ |
 | User | `checkVPN()` | VPN Client | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | User | `checkUptime()` | Last Reboot | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Disk | `checkFreeDiskSpace()` | Free Disk Space | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Disk | `checkUserDirectorySizeItems()` | Desktop Size and Item Count | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Disk | `checkUserDirectorySizeItems()` | Downloads Size and Item Count | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Disk | `checkUserDirectorySizeItems()` | Trash Size and Item Count | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| MDM | `checkMdmProfile()` | MDM Profile | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| MDM | `checkMdmProfile()` | MDM Profile | ✅ | ✅ | ✅ | ✅ | ✅ | — | ✅ | ✅ | — |
 | MDM | `checkAPNs()` | Apple Push Notification service | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | MDM | `checkMdmCertificateExpiration()` | MDM Certificate Expiration | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — |
 | MDM | `checkJamfProCheckIn()` | Jamf Pro Check-In | — | — | — | ✅ | — | — | — | — | — |
@@ -113,12 +114,19 @@ The table below lists every health check function, its human-readable name, and 
 | Network | `checkNetworkHosts()` | Apple Certificate Validation | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Network | `checkNetworkHosts()` | Apple Identity and Content Services | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Network | `checkNetworkHosts()` | Jamf Hosts | — | — | — | ✅ | — | — | — | — | — |
+| Network | `checkWiFiStrength()` | Wi-Fi Strength | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Network | `checkNetworkQuality()` | Network Quality Test | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Apps | `checkAppAutoPatch()` | App Auto-Patch | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| Apps | `checkHomebrewStatus()` | Homebrew Status | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Apps | `checkElectronCornerMask()` | Electron Corner Mask | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Apps | `checkAppAutoPatch()` | App Auto-Patch | ✅ | ✅ | ✅ | ✅ | ✅ | — | ✅ | ✅ | — |
+| Apps | `checkHomebrewStatus()` | Homebrew Status | ✅ | ✅ | ✅ | ✅ | ✅ | — | ✅ | ✅ | ✅ |
+| Apps | `checkElectronCornerMask()` | Electron Corner Mask | ✅ | ✅ | ✅ | ✅ | ✅ | — | ✅ | ✅ | ✅ |
 | Apps | `checkInternal()` | Microsoft Teams | ✅ | — | ✅ | ✅ | ✅ | ✅ | — | — | — |
+| Apps | `checkInternal()` | Microsoft One Drive | — | — | — | — | — | ✅ | — | — | — |
+| Apps | `checkInternal()` | Microsoft Outlook | — | — | — | — | — | ✅ | — | — | — |
+| Apps | `checkInternal()` | Company Portal | — | — | — | — | — | ✅ | — | — | — |
 | Apps | `checkInternal()` | Microsoft Company Portal | — | — | — | — | — | — | ✅ | — | — |
+| Apps | `checkInternal()` | Zoom | — | — | — | — | — | ✅ | — | — | — |
+| Apps | `checkInternal()` | Cortex | — | — | — | — | — | ✅ | — | — | — |
+| Apps | `checkInternal()` | Netskope | — | — | — | — | — | ✅ | — | — | — |
 | Apps | `checkInternal()` | Fleet Desktop | — | — | ✅ | — | — | — | — | — | — |
 | Apps | `checkInternal()` | Self-Service | — | — | — | — | — | — | — | ✅ | — |
 | External | `checkExternalJamfPro()` | BeyondTrust Privilege Management | — | — | — | ✅ | — | — | — | — | — |
@@ -133,15 +141,15 @@ The table below lists every health check function, its human-readable name, and 
 
 | MDM Vendor | Total Checks |
 |---|---|
-| Jamf Pro | 38 |
-| Mosyle | 32 |
-| Addigy | 31 |
-| Filewave | 30 |
-| Fleet | 31 |
-| JumpCloud | 31 |
+| Jamf Pro | 39 |
+| Mosyle | 33 |
+| Addigy | 32 |
+| Filewave | 31 |
+| Fleet | 32 |
+| JumpCloud | 32 |
 | Kandji | 31 |
-| Microsoft Intune | 31 |
-| Generic / None | 27 |
+| Microsoft Intune | 32 |
+| Generic / None | 28 |
 
 > **Note:** `checkNetworkHosts()` is called once per host group; the five Apple host groups plus the Jamf-specific host group each count as one check. `checkUserDirectorySizeItems()` is called three times (Desktop, Downloads, Trash) and each counts as one check.
 

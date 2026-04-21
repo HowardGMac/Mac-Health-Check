@@ -1,5 +1,6 @@
 {
   "highlightColor": "#007AFF",
+  "moveable": true,
   "items": [
     {
       "displayName": "Overview",
@@ -273,7 +274,7 @@
     }
   ],
   "preset": "6",
-  "title": "Mac Health Check (4.0.0b11)",
+  "title": "Mac Health Check (4.0.0b12)",
   "height": 750,
   "width": 975
 }

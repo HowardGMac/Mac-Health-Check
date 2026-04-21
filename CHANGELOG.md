@@ -2,7 +2,7 @@
 
 ## CHANGELOG
 
-### 4.0.0b11 (20-Apr-2026)
+### 4.0.0b12 (21-Apr-2026)
 - Added JSON health reporting (with optional Splunk HTTP Event Collector (HEC) delivery)
 - Added a stand-alone swiftDialog Inspect Mode-flavored report (i.e., `inspectSummaryPreset="on"`), plus cached replay (i.e., `inspectReplayMaximumAgeSeconds`) for `Self Service` runs
 - Refactored `checkElectronCornerMask` to reduce execution time
@@ -10,6 +10,7 @@
 - Raised the minimum required swiftDialog version to `3.1.0.4976`
 - Refactored `checkHomebrewStatus()` to more accurately reflect Homebrew's actual installation status
 - Added "Next Steps" to Inspect Mode-flavored report
+- Added `checkWiFiStrength()`; thanks, @kgolden-code!
 
 ### 3.2.0 (02-Apr-2026)
 - Preserved user-provided local `organizationOverlayiconURL` files by downloading remote overlay icons to a per-run temporary file and only cleaning up that script-managed asset at exit (Thanks for the heads-up, @brian_b!)

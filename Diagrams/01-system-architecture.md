@@ -1,11 +1,11 @@
 # Mac Health Check: System Architecture
 
-This diagram shows the `4.0.0b11` Mac Health Check ecosystem, from administrator customization through MDM deployment, client-side execution, user interaction, and results output.
+This diagram shows the `4.0.0b12` Mac Health Check ecosystem, from administrator customization through MDM deployment, client-side execution, user interaction, and results output.
 
 ```mermaid
 graph TB
     subgraph Admin["⚙️ Administrator Configuration"]
-        SCRIPT["Mac-Health-Check.zsh<br>Core script (4,900+ lines)"]
+        SCRIPT["Mac-Health-Check.zsh<br>Core script (7,400+ lines)"]
         ORGVARS["Organization + Support Defaults<br>Branding, Dock, thresholds,<br>VPN / firewall, support links"]
         EXTCHECKS["external-checks/<br>Optional third-party plugins<br>(BeyondTrust, CrowdStrike, etc.)"]
         RESOURCES["Resources/<br>Build utilities & Makefile"]
@@ -44,7 +44,7 @@ graph TB
         TRIGGER["Policy Trigger<br>User via Self Service<br>or scheduled run"]
         PREFLIGHT["Pre-flight Checks<br>• Running as root?<br>• jq available?<br>• swiftDialog ≥ 3.1.0.4976 installed?<br>• Kill existing Dialog instances"]
         MDMDETECT["MDM Vendor Detection<br>Auto-detect from installed profiles:<br>Jamf Pro / Kandji / Intune / Mosyle<br>JumpCloud / Addigy / Filewave / Fleet"]
-        CHECKLIST["Check Set Selection<br>Vendor-specific list<br>(27–38 checks)"]
+        CHECKLIST["Check Set Selection<br>Vendor-specific list<br>(28–39 checks)"]
 
         POLICY -->|Executes script| TRIGGER
         SILENT -.->|Executes script| TRIGGER
@@ -63,7 +63,7 @@ graph TB
         CHECKLOOP["Health Check Loop<br>System · User · Disk · MDM<br>Network · Apps · External"]
         STATUSES["Check Statuses<br>✅ pass · ⚠️ warning<br>❌ error · ⏭️ skipped"]
         FINAL["Final Main Dialog State<br>Healthy / Unhealthy title / icon"]
-        INSPECT["Detached Inspect Summary<br>Self Service only when inspectSummaryPreset=on<br>fixed swiftDialog Preset 6"]
+        INSPECT["Detached Inspect Summary<br>Self Service only when inspectSummaryPreset=on<br>moveable swiftDialog Preset 6"]
 
         CHECKLIST -->|Initialize dialog| DIALOG
         DIALOG <-->|dialogUpdate per check| CHECKLOOP
@@ -111,7 +111,7 @@ graph TB
 ### Administrator Configuration
 
 **`Mac-Health-Check.zsh`**
-The single deployable artifact (4,900+ lines). Contains the health check logic, swiftDialog UI layer, Dock handling, logging helpers, webhook delivery, and vendor-specific branching. Administrators typically customize the **Organization Variables** and **IT Support Variables** sections before uploading it to MDM.
+The single deployable artifact (7,400+ lines). Contains the health check logic, swiftDialog UI layer, Dock handling, logging helpers, webhook delivery, and vendor-specific branching. Administrators typically customize the **Organization Variables** and **IT Support Variables** sections before uploading it to MDM.
 
 **Organization + Support Defaults**
 Key settings administrators configure before deployment:
@@ -149,13 +149,13 @@ The script validates its environment before running any health checks:
 4. Kills any existing swiftDialog instances
 
 **MDM Vendor Detection**
-The script inspects installed configuration profiles to identify the MDM vendor, then selects the appropriate health check set (27–38 checks depending on vendor capabilities).
+The script inspects installed configuration profiles to identify the MDM vendor, then selects the appropriate health check set (28–39 checks depending on vendor capabilities).
 
 ---
 
 ### Runtime Execution
 
-Health checks execute sequentially, with each result posted to the swiftDialog dialog via a named pipe (`dialogUpdate`) and captured into a structured per-check result collector for final reporting. When Dock integration is enabled, non-`Silent` runs also show a Dock icon with a decreasing badge count. After all checks complete, the main dialog updates to its final healthy / unhealthy state, non-`Silent` runs with failures still trigger a persistent swiftDialog pseudo-alert notification, and `4.0.0b11` writes a final JSON health report before cleanup. In `Self Service`, a normal run also launches a detached Inspect Mode fixed Preset 6 guided summary with separate `Unhealthy` and `Healthy` sections while the main dialog retains its standard countdown, and reruns can replay that cached summary without re-running checks when `inspectSummaryPreset="on"` and the handoff file is still younger than `inspectReplayMaximumAgeSeconds`.
+Health checks execute sequentially, with each result posted to the swiftDialog dialog via a named pipe (`dialogUpdate`) and captured into a structured per-check result collector for final reporting. When Dock integration is enabled, non-`Silent` runs also show a Dock icon with a decreasing badge count. After all checks complete, the main dialog updates to its final healthy / unhealthy state, non-`Silent` runs with failures still trigger a persistent swiftDialog pseudo-alert notification, and `4.0.0b12` writes a final JSON health report before cleanup. In `Self Service`, a normal run also launches a detached, moveable Inspect Mode Preset 6 guided summary with separate `Unhealthy` and `Healthy` sections while the main dialog retains its standard countdown, and reruns can replay that cached summary without re-running checks when `inspectSummaryPreset="on"` and the handoff file is still younger than `inspectReplayMaximumAgeSeconds`.
 
 ---
 
@@ -165,7 +165,7 @@ Health checks execute sequentially, with each result posted to the swiftDialog d
 
 **JSON Report** — Every run writes the canonical report artifact to `/var/tmp/MacHealthCheck-Report.json` with root-only permissions. Optional Splunk HEC delivery wraps that same finalized report data rather than generating a second source of truth.
 
-**Inspect Summary** — `Self Service` runs also generate a readable handoff file at `/var/tmp/MacHealthCheck-Inspect-Config.json`, which the detached Inspect Mode fixed Preset 6 guided summary reads during the retained main-dialog countdown and can replay on rerun when `inspectSummaryPreset="on"` plus the cached handoff file remains younger than `inspectReplayMaximumAgeSeconds`. The summary now separates recorded results into `Unhealthy` and `Healthy` sections and omits either section when no checks were recorded in that bucket. Set the toggle to `off` to disable both behaviors entirely.
+**Inspect Summary** — `Self Service` runs also generate a readable handoff file at `/var/tmp/MacHealthCheck-Inspect-Config.json`, which the detached, moveable Inspect Mode Preset 6 guided summary reads during the retained main-dialog countdown and can replay on rerun when `inspectSummaryPreset="on"` plus the cached handoff file remains younger than `inspectReplayMaximumAgeSeconds`. The summary now separates recorded results into `Unhealthy` and `Healthy` sections and omits either section when no checks were recorded in that bucket. Set the toggle to `off` to disable both behaviors entirely.
 
 **Failure Notification** — When a non-`Silent` run detects failures, `displayFailureNotification()` presents a persistent swiftDialog pseudo-alert listing the failed health checks and offering a support link.
 

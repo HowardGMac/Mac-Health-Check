@@ -1,13 +1,13 @@
 # Mac Health Check: Operation Modes
 
-This diagram compares all five `4.0.0b11` Mac Health Check operation modes, showing how each mode differs in terms of UI, Dock behavior, logging, and intended use case.
+This diagram compares all five `4.0.0b12` Mac Health Check operation modes, showing how each mode differs in terms of UI, Dock behavior, logging, and intended use case.
 
 ```mermaid
 graph TB
     ENTRY(["Mac-Health-Check.zsh<br>Parameter 4: operationMode"])
 
     subgraph SelfService["🖥️ Self Service (Default)"]
-        SS_DESC["Trigger: User via MDM Self Service<br>UI: Full swiftDialog dialog + detached fixed Preset 6 guided summary with split Unhealthy/Healthy sections<br>Anticipation: 2s between checks<br>Dock badge: Yes (when enabled)<br>Completion timer: 60s main-dialog countdown<br>Logging: Full structured log"]
+        SS_DESC["Trigger: User via MDM Self Service<br>UI: Full swiftDialog dialog + detached moveable Preset 6 guided summary with split Unhealthy/Healthy sections<br>Anticipation: 2s between checks<br>Dock badge: Yes (when enabled)<br>Completion timer: 60s main-dialog countdown<br>Logging: Full structured log"]
         SS_USE["Use case:<br>End-user–initiated health check<br>on-demand via Self Service"]
 
         style SS_DESC fill:#e1f5ff
@@ -31,8 +31,8 @@ graph TB
     end
 
     subgraph Development["🔧 Development"]
-        DV_DESC["Trigger: Manual / MDM policy<br>UI: swiftDialog — curated dev subset<br>Anticipation: 2s between checks<br>Dock badge: Yes (when enabled)<br>Completion timer: 60s auto-close<br>Logging: Full structured log"]
-        DV_USE["Use case:<br>Iterating on a curated set of<br>high-signal health checks"]
+        DV_DESC["Trigger: Manual / MDM policy<br>UI: swiftDialog — single-check dev path<br>Anticipation: 2s between checks<br>Dock badge: Yes (when enabled)<br>Completion timer: 60s auto-close<br>Logging: Full structured log"]
+        DV_USE["Use case:<br>Iterating on current Wi-Fi<br>signal health check"]
 
         style DV_DESC fill:#fff4e6
         style DV_USE fill:#ffecb3
@@ -65,15 +65,15 @@ graph TB
 |---|---|---|---|---|---|
 | **Parameter 4 value** | `Self Service` | `Silent` | `Debug` | `Development` | `Test` |
 | **Is default?** | Yes | No | No | No | No |
-| **swiftDialog UI** | Full dialog | None | Full dialog | Curated dev subset | Full dialog |
+| **swiftDialog UI** | Full dialog | None | Full dialog | Single Wi-Fi Strength check | Full dialog |
 | **Anticipation delay** | 2 seconds | 0 seconds | 2 seconds | 2 seconds | 2 seconds |
 | **Dock badge** | Yes (when enabled) | No | Yes (when enabled) | Yes (when enabled) | Yes (when enabled) |
 | **Completion timer** | 60s on normal full runs | N/A | 60s (configurable) | 60s (configurable) | 60s (configurable) |
-| **Detached inspect summary** | Yes when `inspectSummaryPreset="on"` (fixed Preset 6) | No | No | No | No |
+| **Detached inspect summary** | Yes when `inspectSummaryPreset="on"` (moveable Preset 6) | No | No | No | No |
 | **Fresh-config replay** | Yes when `inspectSummaryPreset="on"` and cache age is below `inspectReplayMaximumAgeSeconds` | No | No | No | No |
 | **Logging** | Full | Full | Full + `set -x` | Full structured log | Full structured log |
 | **Persistent failure notification** | If failures | No | If failures | If failures | No |
-| **Real check data** | Yes | Yes | Yes | Yes (curated subset) | No (simulated pass results) |
+| **Real check data** | Yes | Yes | Yes | Yes (Wi-Fi Strength only) | No (simulated pass results) |
 | **Intended actor** | End user | Automated | Administrator | Developer | Developer |
 
 ---
@@ -81,7 +81,7 @@ graph TB
 ## Mode Details
 
 ### Self Service (Default)
-The primary end-user-facing mode. Launched by a user clicking the Mac Health Check policy in MDM Self Service. Displays the full swiftDialog progress dialog with real-time status updates as each check runs. When Dock integration is enabled, the Dock badge counts down remaining checks. After report generation, normal runs launch a detached Inspect Mode fixed Preset 6 guided summary with separate `Unhealthy` and `Healthy` sections while the main dialog still completes its existing `completionTimer` countdown. If the inspect config from a recent `Self Service` run is still valid and younger than `inspectReplayMaximumAgeSeconds`, rerunning the script replays the cached inspect summary immediately and skips the health-check run plus the main dialog countdown. Set `inspectSummaryPreset="on"` to keep those Preset 6 behaviors enabled, or `off` to keep the standard completion flow only.
+The primary end-user-facing mode. Launched by a user clicking the Mac Health Check policy in MDM Self Service. Displays the full swiftDialog progress dialog with real-time status updates as each check runs. When Dock integration is enabled, the Dock badge counts down remaining checks. After report generation, normal runs launch a detached, moveable Inspect Mode Preset 6 guided summary with separate `Unhealthy` and `Healthy` sections while the main dialog still completes its existing `completionTimer` countdown. If the inspect config from a recent `Self Service` run is still valid and younger than `inspectReplayMaximumAgeSeconds`, rerunning the script replays the cached inspect summary immediately and skips the health-check run plus the main dialog countdown. Set `inspectSummaryPreset="on"` to keep those Preset 6 behaviors enabled, or `off` to keep the standard completion flow only.
 
 **When to use:** Standard deployment for user-initiated compliance checks.
 
@@ -95,16 +95,16 @@ Runs all health checks without displaying any user interface. Intended for sched
 ---
 
 ### Debug
-Similar to Self Service, but with `set -x` tracing enabled plus swiftDialog debug launch arguments (`--verbose --resizable --debug red`). In `4.0.0b11`, Debug mode also enables pretty-printed local JSON reporting, while intentionally retaining the existing countdown-based ending instead of launching the detached inspect summary. This makes it easier to identify which part of the zsh script or dialog rendering is causing unexpected behavior.
+Similar to Self Service, but with `set -x` tracing enabled plus swiftDialog debug launch arguments (`--verbose --resizable --debug red`). In `4.0.0b12`, Debug mode also enables pretty-printed local JSON reporting, while intentionally retaining the existing countdown-based ending instead of launching the detached inspect summary. This makes it easier to identify which part of the zsh script or dialog rendering is causing unexpected behavior.
 
 **When to use:** Diagnosing why a specific check is failing or returning an unexpected status.
 
 ---
 
 ### Development
-Runs current development subset of checks in normal non-`Silent` dialog flow. In current release, subset is `checkHomebrewStatus()` plus `checkElectronCornerMask()`, keeping feedback focused and fast without waiting for full vendor-specific run.
+Runs current development subset of checks in normal non-`Silent` dialog flow. In current release, subset is only `checkWiFiStrength()`, keeping feedback focused and fast without waiting for full vendor-specific run.
 
-**When to use:** Tuning check behavior, remediation copy, or dialog presentation while keeping the run shorter than a full production policy.
+**When to use:** Tuning Wi-Fi signal evaluation, remediation copy, or dialog presentation while keeping the run far shorter than a full production policy.
 
 ---
 
