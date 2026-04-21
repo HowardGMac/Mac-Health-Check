@@ -26,7 +26,7 @@
 # - Refactored `checkHomebrewStatus()` to more accurately reflect Homebrew's actual installation status
 # - Added "Next Steps" to Inspect Mode-flavored report
 # - Added `checkWiFiStrength()`; thanks, @kgolden-code!
-# - Refactored `displayFailureNotification()` to allow users to view the Inspect Mode-flavored report
+# - Removed `displayFailureNotification()` in favor of the Inspect Mode-flavored report
 #
 ####################################################################################################
 
@@ -194,7 +194,6 @@ completionTimer="60"
 inspectSummaryPreset="on"
 inspectConfigPath="/var/tmp/MacHealthCheck-Inspect-Config.json"
 inspectLaunchLogPath="/var/tmp/MacHealthCheck-Inspect-Summary.log"
-failureNotificationActionScriptPath="/var/tmp/MacHealthCheck-Inspect-Action.zsh"
 inspectReplayMaximumAgeSeconds="900" # 15 minutes
 
 # Splunk and JSON reporting defaults
@@ -773,9 +772,6 @@ fi
 # swiftDialog Binary Path
 dialogAppBundle="/Library/Application Support/Dialog/Dialog.app"
 dialogBinary="/usr/local/bin/dialog"
-
-# Notification Icon URL (used by displayFailureNotification)
-notificationIconURL="https://raw.githubusercontent.com/dan-snelson/Mac-Health-Check/refs/heads/main/images/MHC_icon.png"
 
 # Enable debugging options for swiftDialog
 dialogBinaryDebugArgs=()
@@ -3743,101 +3739,6 @@ EOF
 
 }
 
-
-
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-# Display Failure Notification (Requires swiftDialog 3.1.0.4970+)
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-
-function failureNotificationOffersInspectSummary() {
-
-    [[ "${operationMode}" == "Self Service" ]] && inspectSummaryIsEnabled
-
-}
-
-function getFailureNotificationButtonText() {
-
-    if failureNotificationOffersInspectSummary; then
-        echo "View Details"
-    else
-        echo "Contact Support"
-    fi
-
-}
-
-function prepareFailureNotificationActionScript() {
-
-    local actionScriptPath="${1:-${failureNotificationActionScriptPath}}"
-    local actionScriptContents=""
-
-    actionScriptContents="#!/bin/zsh
-inspectConfigPath=${(q)inspectConfigPath}
-dialogCommand=${(q)dialogBinary}
-fallbackURL=${(q)supportTeamWebsite}
-for attempt in {1..20}; do
-    if [[ -r \"\${inspectConfigPath}\" ]]; then
-        /usr/bin/nohup \"\${dialogCommand}\" --inspect-mode --inspect-config \"\${inspectConfigPath}\" >/dev/null 2>&1 &
-        exit 0
-    fi
-    /bin/sleep 1
-done
-if [[ -n \"\${fallbackURL}\" ]]; then
-    /usr/bin/open \"\${fallbackURL}\"
-fi"
-
-    writeReadableTextFile "${actionScriptPath}" "${actionScriptContents}"
-    chmod 755 "${actionScriptPath}" 2>/dev/null
-
-    [[ -x "${actionScriptPath}" ]]
-
-}
-
-function getFailureNotificationButtonAction() {
-
-    local fallbackURL="${supportTeamWebsite}"
-
-    if ! failureNotificationOffersInspectSummary; then
-        echo "${fallbackURL}"
-        return 0
-    fi
-
-    if prepareFailureNotificationActionScript; then
-        echo "${failureNotificationActionScriptPath}"
-    else
-        echo "${fallbackURL}"
-    fi
-
-}
-
-function displayFailureNotification() {
-
-    notice "Displaying failure notification …"
-
-    local failureList=""
-    local buttonText="$( getFailureNotificationButtonText )"
-    local buttonAction="$( getFailureNotificationButtonAction )"
-    local -a failedItems
-    failedItems=( "${(s/; /)overallHealth}" )
-    for item in "${failedItems[@]}"; do
-        [[ -n "${item}" ]] && failureList+="\n• ${item}"
-    done
-
-    local notificationMessage="Items failed during this health check. Please [contact support](${supportTeamWebsite}) for assistance.${failureList}"
-
-    "${dialogBinary}" \
-        --notification \
-        --style pseudo-alert \
-        --icon "${notificationIconURL}" \
-        --title "${humanReadableScriptName} Failures" \
-        --message "${notificationMessage}" \
-        --button1text "Close" \
-        --button2text "${buttonText}" \
-        --button2action "${buttonAction}" &
-
-}
-
-
-
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # Quit Script (thanks, @bartreadon!)
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -3867,7 +3768,6 @@ function quitScript() {
         if [[ "${operationMode}" != "Silent" ]]; then
             dialogUpdate "icon: SF=xmark.circle, weight=bold, colour1=#BB1717, colour2=#F31F1F"
             dialogUpdate "title: Computer Unhealthy <br>as of $( date '+%A, %B %d at %I:%M %p %Z' )"
-            displayFailureNotification
         fi
         if [[ -n "${webhookURL}" ]]; then
             info "Sending webhook message"

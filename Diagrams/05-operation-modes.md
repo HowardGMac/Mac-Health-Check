@@ -1,6 +1,6 @@
 # Mac Health Check: Operation Modes
 
-This diagram compares all five `4.0.0b12` Mac Health Check operation modes, showing how each mode differs in terms of UI, Dock behavior, logging, and intended use case.
+This diagram compares all five `4.0.0b14` Mac Health Check operation modes, showing how each mode differs in terms of UI, Dock behavior, logging, and intended use case.
 
 ```mermaid
 graph TB
@@ -72,7 +72,6 @@ graph TB
 | **Detached inspect summary** | Yes when `inspectSummaryPreset="on"` (moveable Preset 6) | No | No | No | No |
 | **Fresh-config replay** | Yes when `inspectSummaryPreset="on"` and cache age is below `inspectReplayMaximumAgeSeconds` | No | No | No | No |
 | **Logging** | Full | Full | Full + `set -x` | Full structured log | Full structured log |
-| **Persistent failure notification** | If failures | No | If failures | If failures | No |
 | **Real check data** | Yes | Yes | Yes | Yes (Wi-Fi Strength only) | No (simulated pass results) |
 | **Intended actor** | End user | Automated | Administrator | Developer | Developer |
 
@@ -88,14 +87,14 @@ The primary end-user-facing mode. Launched by a user clicking the Mac Health Che
 ---
 
 ### Silent
-Runs all health checks without displaying any user interface. Intended for scheduled background compliance runs (for example, at login or on recurring MDM check-in). The `anticipationDuration` is automatically set to `0` in this mode to minimize execution time. Results are written to the client log, persisted to the local JSON report, and, if configured, posted to a webhook or forwarded to Splunk. Dock integration and persistent failure notifications are suppressed.
+Runs all health checks without displaying any user interface. Intended for scheduled background compliance runs (for example, at login or on recurring MDM check-in). The `anticipationDuration` is automatically set to `0` in this mode to minimize execution time. Results are written to the client log, persisted to the local JSON report, and, if configured, posted to a webhook or forwarded to Splunk. Dock integration and other end-user follow-up UI are suppressed.
 
 **When to use:** Continuous background compliance monitoring. Pair with a Teams or Slack webhook to surface failures without interrupting users.
 
 ---
 
 ### Debug
-Similar to Self Service, but with `set -x` tracing enabled plus swiftDialog debug launch arguments (`--verbose --resizable --debug red`). In `4.0.0b12`, Debug mode also enables pretty-printed local JSON reporting, while intentionally retaining the existing countdown-based ending instead of launching the detached inspect summary. This makes it easier to identify which part of the zsh script or dialog rendering is causing unexpected behavior.
+Similar to Self Service, but with `set -x` tracing enabled plus swiftDialog debug launch arguments (`--verbose --resizable --debug red`). In `4.0.0b14`, Debug mode also enables pretty-printed local JSON reporting, while intentionally retaining the existing countdown-based ending instead of launching the detached inspect summary. This makes it easier to identify which part of the zsh script or dialog rendering is causing unexpected behavior.
 
 **When to use:** Diagnosing why a specific check is failing or returning an unexpected status.
 

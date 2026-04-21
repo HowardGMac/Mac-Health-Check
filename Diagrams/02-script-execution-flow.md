@@ -1,6 +1,6 @@
 # Mac Health Check: Script Execution Flow
 
-This flowchart documents the `4.0.0b12` decision logic executed each time Mac Health Check runs, from the initial invocation through pre-flight validation, health check execution, and final output.
+This flowchart documents the `4.0.0b14` decision logic executed each time Mac Health Check runs, from the initial invocation through pre-flight validation, health check execution, and final output.
 
 ```mermaid
 graph TB
@@ -144,8 +144,6 @@ graph TB
     subgraph Final["🏁 Final State & Output"]
         FINALSTATE["Evaluate overall compliance<br>Update dialog to final state"]
         FAILURES{"Failures detected?"}
-        FAILNOTICE{"Non-Silent mode?"}
-        NOTIFY["Display persistent failure notification<br>swiftDialog pseudo-alert"]
         WEBHOOK{"webhookURL<br>configured?"}
         SENDWEBHOOK["Post failure summary<br>to Teams or Slack"]
         REPORT["Write canonical local JSON report<br>and optional Splunk HEC payload"]
@@ -157,11 +155,8 @@ graph TB
         EXIT(["⏹ Script Exits"])
 
         FINALSTATE --> FAILURES
-        FAILURES -->|Yes| FAILNOTICE
+    FAILURES -->|Yes| WEBHOOK
         FAILURES -->|No| REPORT
-        FAILNOTICE -->|Yes| NOTIFY
-        FAILNOTICE -->|No| WEBHOOK
-        NOTIFY --> WEBHOOK
         WEBHOOK -->|Yes| SENDWEBHOOK
         WEBHOOK -->|No| REPORT
         SENDWEBHOOK --> REPORT
@@ -203,7 +198,7 @@ Set via MDM policy parameter. Determines UI behavior and which checks execute. T
 The script must run as root. If not, it calls `fatal()` and exits immediately with a log entry.
 
 ### 3. jq Availability
-The script requires `jq` for JSON validation, formatting, and dialog/listitem JSON merging. If `jq` is unavailable, `4.0.0b12` exits during pre-flight with a fatal dependency message.
+The script requires `jq` for JSON validation, formatting, and dialog/listitem JSON merging. If `jq` is unavailable, `4.0.0b14` exits during pre-flight with a fatal dependency message.
 
 ### 4. swiftDialog Version
 The script requires swiftDialog ≥ 3.1.0.4976. If the installed version is older (or swiftDialog is absent), the script downloads and installs the latest release from GitHub before proceeding.
@@ -233,8 +228,8 @@ In `Self Service`, the script uses finalized in-memory results to generate `/var
 ### 11. Self Service Cached Replay
 If `/var/tmp/MacHealthCheck-Inspect-Config.json` is younger than `inspectReplayMaximumAgeSeconds` and the cached inspect JSON still validates, a rerun in `Self Service` skips health checks entirely, launches the cached moveable Preset 6 guided summary immediately, and exits without showing the main dialog countdown. Setting `inspectSummaryPreset="off"` disables this replay path.
 
-### 12. Failure Notification
-When non-`Silent` runs detect failures, `displayFailureNotification()` launches a persistent swiftDialog pseudo-alert summarizing the failed health checks and offering a support action link.
+### 12. Unhealthy Final State
+When failures are detected, non-`Silent` runs update the main dialog to its unhealthy title and icon state, then continue through report generation, webhook delivery when configured, and the existing completion flow. In `Self Service` with `inspectSummaryPreset="on"`, the detached inspect summary remains the only post-run failure detail surface.
 
 ---
 
@@ -247,5 +242,5 @@ When non-`Silent` runs detect failures, `displayFailureNotification()` launches 
 | Normal: Self Service | Detached moveable Preset 6 guided summary launches after report generation and the main dialog still completes its normal countdown | Yes |
 | Replay: Self Service cached summary | Fresh inspect config launches cached moveable Preset 6 guided summary and skips the health-check loop | Yes |
 | Normal: Test | Current vendor list items simulated as success | Yes |
-| Normal: With failure notification | Non-`Silent` failures trigger pseudo-alert summary | Yes |
+| Normal: Unhealthy non-`Silent` run | Main dialog ends unhealthy; `Self Service` can still launch detached inspect summary | Yes |
 | Normal: With webhook | Failed run posts webhook before report generation and final UI cleanup | Yes |

@@ -82,7 +82,7 @@ Maintain the established style of `Mac-Health-Check.zsh` unless the user explici
 ## Mode-Specific Expectations
 
 - `Self Service` is the default production mode.
-- `Silent` runs checks and logging without launching the main dialog or non-essential UI follow-up such as persistent failure notifications.
+- `Silent` runs checks and logging without launching the main dialog or non-essential UI follow-up such as detached inspect summaries.
 - `Debug` enables verbose troubleshooting behavior and should remain obviously non-production.
 - `Development` intentionally runs a curated subset of checks and list items for faster iteration.
 - `Test` is a special validation path and should not accidentally become the default or leak test-only behavior into production runs.
@@ -92,7 +92,7 @@ Maintain the established style of `Mac-Health-Check.zsh` unless the user explici
 - Pre-flight behavior must remain reliable (root, dependency, and environment checks).
 - Dialog JSON generation must stay valid and resilient.
 - Health checks should fail safely: warnings where possible, fatal only when required.
-- Failure notifications and Dock integration should degrade gracefully and must not break `Silent` mode.
+- Detached inspect summaries and Dock integration should degrade gracefully and must not break `Silent` mode.
 - Jamf-specific inventory or external-check paths must not regress non-Jamf vendors.
 - Logging should remain structured and useful for troubleshooting.
 - User guidance should explain what failed and what to do next.

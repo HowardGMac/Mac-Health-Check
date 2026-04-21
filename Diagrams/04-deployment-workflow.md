@@ -1,6 +1,6 @@
 # Mac Health Check: Deployment Workflow
 
-This diagram provides a step-by-step guide for deploying the `4.0.0b12` release of Mac Health Check through an MDM solution. Follow the phases in order for a successful deployment.
+This diagram provides a step-by-step guide for deploying the `4.0.0b14` release of Mac Health Check through an MDM solution. Follow the phases in order for a successful deployment.
 
 ```mermaid
 graph TB
@@ -136,7 +136,7 @@ graph TB
         P8["Promote to production scope"]
         P8A["Monitor /var/log/org.churchofjesuschrist.log<br>Review structured log output"]
         P8B["Review webhook alerts<br>(if configured)"]
-        P8C["Validate Dock badge and failure notification<br>on unhealthy non-Silent runs"]
+        P8C["Validate Dock badge and unhealthy end-state<br>on non-Silent runs"]
         P8D["Check MDM inventory<br>for compliance trends"]
 
         P8 --> P8A
@@ -212,7 +212,7 @@ If your organization uses BeyondTrust, Cisco Umbrella, CrowdStrike, or GlobalPro
 2. Configure the script parameters:
    - **Parameter 4** — Operation mode (start with `Debug` for initial testing)
    - **Parameter 5** — Webhook URL (optional)
-   - **Parameters 6-10** — Splunk reporting mode, HEC URL, HEC token, optional custom JSON fields, and reporting debug mode
+    - **Parameters 6-11** — Splunk reporting mode, HEC URL, HEC token, HEC index, HEC sourcetype, and reporting debug mode
 
 ---
 
@@ -252,7 +252,7 @@ Use the three developer-oriented modes to validate behavior before rolling out t
 After production deployment, monitor:
 
 - **Client logs** at `/var/log/org.churchofjesuschrist.log` on managed Macs — look for `[WARNING]` and `[ERROR]` entries
-- **Dock badge, inspect summary handoff, cached replay, and persistent failure notifications** on test Macs in non-`Silent` modes — confirm countdown badges update per check, `Self Service` launches the detached moveable Preset 6 guided summary with separate `Unhealthy` and `Healthy` sections during the retained main-dialog countdown when `inspectSummaryPreset="on"`, reruns replay the cached summary without re-running checks only while the cached handoff file remains younger than `inspectReplayMaximumAgeSeconds`, and failed runs still show the current pseudo-alert summary and support action
+- **Dock badge, inspect summary handoff, cached replay, and unhealthy end-state handling** on test Macs in non-`Silent` modes — confirm countdown badges update per check, `Self Service` launches the detached moveable Preset 6 guided summary with separate `Unhealthy` and `Healthy` sections during the retained main-dialog countdown when `inspectSummaryPreset="on"`, reruns replay the cached summary without re-running checks only while the cached handoff file remains younger than `inspectReplayMaximumAgeSeconds`, and failed runs now rely on the unhealthy main-dialog state plus the detached `Self Service` summary instead of a pseudo-alert notification
 - **Webhook notifications** in Teams or Slack (if configured) — review failure summaries
 - **MDM inventory** — for Jamf Pro, each run can trigger a recon; use Smart Group criteria based on extension attributes for fleet-wide compliance visibility
 
