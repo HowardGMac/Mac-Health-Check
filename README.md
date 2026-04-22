@@ -165,6 +165,7 @@ The following health checks and information reporting are included in version `4
 - Supports `splunkOperationMode=off` to disable HEC delivery explicitly while still preserving local JSON report generation
 - Preserves local report generation in `splunkOperationMode=test` while intentionally skipping network transmission
 - Requires `jq` for JSON validation and formatting, with local report generation and Splunk payload assembly stopping at pre-flight if `jq` is unavailable
+- Includes copy/paste Splunk SPL, Simple XML, and Dashboard Studio starter examples in [Resources/Splunk-Dashboard-Reference.md](Resources/Splunk-Dashboard-Reference.md)
 
 #### :new: Self Service Inspect Mode Summary
 - `Self Service` runs now generate `/var/tmp/MacHealthCheck-Inspect-Config.json` directly from finalized in-memory results
