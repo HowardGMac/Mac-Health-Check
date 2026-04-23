@@ -2815,6 +2815,10 @@ function getInspectExpectedComparisonTextByIndex() {
             echo "Installed"
             return
             ;;
+        "Wi-Fi Strength" )
+            echo ">= -55 Excellent\n>= -65 Good\n>= -75 Fair"
+            return
+            ;;
     esac
 
     if [[ -n "${remediation}" && "${remediation}" != "${organizationBoilerplateComplianceMessage}" && "${remediation}" != "${message}" && "${remediation}" != "${rawValue}" ]]; then
@@ -6097,17 +6101,17 @@ function checkWiFiStrength() {
     local quality="Unknown"
 
     if (( rssi >= -55 )); then
-        quality="Excellent"
+        quality="${rssi} dBm:Excellent"
         dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${footerStatusColor}, iconalpha: 0.8, subtitle: RSSI ${rssi} dBm, status: success, statustext: ${quality}"
     elif (( rssi >= -65 )); then
-        quality="Good"
+        quality="${rssi} dBm:Good"
         dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${footerStatusColor}, iconalpha: 0.8, subtitle: RSSI ${rssi} dBm, status: success, statustext: ${quality}"
     elif (( rssi >= -75 )); then
-        quality="Fair"
+        quality="${rssi} dBm:Fair"
         footerStatusColor="${statusColorError}"
         dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorError}, iconalpha: 0.8, subtitle: RSSI ${rssi} dBm, status: error, statustext: ${quality}"
     else
-        quality="Poor"
+        quality="${rssi} dBm:Poor"
         footerStatusColor="${statusColorFail}"
         overallHealth+="${humanReadableCheckName}; "
         dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorFail}, iconalpha: 0.8, subtitle: RSSI ${rssi} dBm, status: fail, statustext: ${quality}"
