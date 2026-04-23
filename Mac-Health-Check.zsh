@@ -2748,19 +2748,19 @@ function getInspectExpectedComparisonTextByIndex() {
             return
             ;;
         "Free Disk Space" )
-            echo "Free disk space above minimum threshold"
+            echo "Free disk space above minimum threshold (> than ${allowedMinimumFreeDiskPercentage} %)"
             return
             ;;
         "Desktop Size and Item Count" )
-            echo "Desktop usage within policy"
+            echo "Desktop usage within policy\n(< than ${allowedMaximumDirectoryPercentage} %)"
             return
             ;;
         "Downloads Size and Item Count" )
-            echo "Downloads usage within policy"
+            echo "Downloads usage within policy\n(< than ${allowedMaximumDirectoryPercentage} %)"
             return
             ;;
         "Trash Size and Item Count" )
-            echo "Trash usage within policy"
+            echo "Trash usage within policy\n(< than ${allowedMaximumDirectoryPercentage} %)"
             return
             ;;
         "Password Hint" )
