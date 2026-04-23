@@ -1,4 +1,8 @@
-# Mac Health Check Splunk Dashboard Reference (4.0.0b14)
+# Mac Health Check Splunk Dashboard Reference (4.0.0b15)
+
+> <img src="../images/MHC_4_Splunk_Dashboard.png" alt="Splunk Dashboard" width="800"/>
+> 
+>  See: [Splunk-Mac_Health_Check_4.0.0b14-2026-04-23-132412.json](Splunk-Mac_Health_Check_4.0.0b14-2026-04-23-132412.json)
 
 ## Overview
 
@@ -23,7 +27,7 @@ Target checks:
 
 ## Assumptions
 
-Mac Health Check `4.0.0b14` writes final report JSON with these important fields:
+Mac Health Check `4.0.0b15` writes final report JSON with these important fields:
 
 - `metadata.timestamp`
 - `metadata.hostname`

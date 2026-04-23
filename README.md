@@ -1,10 +1,10 @@
 ![GitHub release (latest by date)](https://img.shields.io/github/v/release/dan-snelson/Mac-Health-Check?display_name=tag) ![GitHub pre-release (latest by date)](https://img.shields.io/github/v/release/dan-snelson/Mac-Health-Check?display_name=tag&include_prereleases) ![GitHub issues](https://img.shields.io/github/issues-raw/dan-snelson/Mac-Health-Check) ![GitHub closed issues](https://img.shields.io/github/issues-closed-raw/dan-snelson/Mac-Health-Check) ![GitHub pull requests](https://img.shields.io/github/issues-pr-raw/dan-snelson/Mac-Health-Check) ![GitHub closed pull requests](https://img.shields.io/github/issues-pr-closed-raw/dan-snelson/Mac-Health-Check) [![swiftDialog](https://img.shields.io/badge/swiftDialog-Enabled-blue)](https://swiftdialog.app) [![Semgrep Security Scan](https://img.shields.io/badge/security%20scanned%20by-Semgrep-00C7B7?style=flat&logo=semgrep&logoColor=white)](https://semgrep.dev)
 
-# Mac Health Check (4.0.0b14)
+# Mac Health Check (4.0.0b15)
 
-> A **major** update to the practical, MDM-agnostic, user-friendly approach to surfacing Mac compliance information directly to end-users — and enterprise reporting data warehouses — via your MDM's self-service app
+> A **major** update to the practical, MDM-agnostic, user-friendly approach to surfacing Mac compliance information directly to end-users — and now **enterprise reporting data warehouses** — via your MDM's self-service app
 
-<img src="images/MHC_3.2.0_Poster.png" alt="Mac Health Check Hero" width="800"/>
+<img src="images/MHC_3.2.0.png" alt="Mac Health Check Hero" width="800"/>
 
 ## Overview
 
@@ -16,13 +16,15 @@ Deployment of Mac Health Check involves configuring organizational defaults, emb
 
 Administrators can customize the user interface using swiftDialog’s visual capabilities, making the experience both informative and approachable.
 
-The tool logs results for review, writes a structured JSON health report locally, can optionally forward that report to Splunk HEC, and continues to avoid altering device configuration. In `Self Service`, `4.0.0b14` launches a detached swiftDialog Inspect Mode `preset6` guided summary built directly from finalized in-memory results, now split into separate `Unhealthy` and `Healthy` sections, while retaining the main dialog's 60-second completion countdown. Reruns within 15 minutes can replay that cached summary without re-running health checks, and unhealthy runs now rely on the final main-dialog state plus that detached inspect summary instead of a separate pseudo-alert notification. `Silent` remains well-suited for background IT visibility without end-user intrusion.
+The tool logs results for review, writes a structured JSON health report locally, can optionally forward that report to Splunk HEC, and continues to avoid altering device configuration. In `Self Service`, `4.0.0b15` launches a detached swiftDialog Inspect Mode `preset6` guided summary built directly from finalized in-memory results, now split into separate `Unhealthy` and `Healthy` sections, while retaining the main dialog's 60-second completion countdown. Reruns within 15 minutes can replay that cached summary without re-running health checks, and unhealthy runs now rely on the final main-dialog state plus that detached inspect summary instead of a separate pseudo-alert notification. `Silent` remains well-suited for background IT visibility without end-user intrusion.
 
 `inspectSummaryPreset` is now an `on` / `off` toggle: `on` launches the fixed Preset 6 inspect summary and enables cached replay, while `off` disables both behaviors entirely.
 
-The current `4.0.0b14` beta expects swiftDialog `3.1.0.4976` or newer so `Self Service` can launch the detached inspect summary.
+The current `4.0.0b15` beta expects swiftDialog `3.1.0.4976` or newer so `Self Service` can launch the detached inspect summary.
 
 <a href="https://www.youtube.com/watch?v=rDPoYlSSEtQ&t=36s" target="_blank"><img src="images/Mac_Health_Check Presentation.png" alt="Rocketman Tech December 2025 Meetup" width="600"/><br />Rocketman Tech December 2025 Meetup</a> (05-Dec-2025)
+
+
 
 ## Use Cases
 
@@ -36,7 +38,11 @@ Mac Health Check is particularly valuable in IT support workflows, serving as an
 - `splunkOperationMode=off` disables HEC delivery explicitly while still preserving local JSON report generation
 - `splunkOperationMode=test` preserves local report generation while intentionally skipping network transmission
 
-#### Reviewing the JSON Report
+<img src="images/MHC_4_Splunk_Dashboard.png" alt="Splunk Dashboard" width="800"/>
+
+See: [Resources/Splunk-Dashboard-Reference.md](Resources/Splunk-Dashboard-Reference.md) for copy/paste Splunk SPL, Simple XML, and Dashboard Studio starter examples.
+
+### :new: End-user Reporting
 
 User-facing report:
 
@@ -85,6 +91,8 @@ jq -r '
 - No dialog is presented to the end-user
 - Ideal for background compliance reporting
 - Complements existing MDM compliance frameworks
+- When combined with `splunkOperationMode=production`, suppresses non-Splunk stdout/stderr noise in Jamf policy logs while continuing to write the full run to `${scriptLog}`
+- In that same `Silent` + `splunkOperationMode=production` combination, `updateComputerInventory()` logs a skip message and does not run `jamf recon`
 
 ### Dock Integration
 
@@ -95,11 +103,11 @@ jq -r '
 - If dock icon setup fails, Mac Health Check logs a warning and falls back to the default `/usr/local/bin/dialog` launch path
 
 ## Features
-The following health checks and information reporting are included in version `4.0.0b14`, which operates in `Self Service` mode by default. (Change `operationMode` to `Debug`, `Development` or `Test` when getting ready to deploy in production.)
+The following health checks and information reporting are included in version `4.0.0b15`, which operates in `Self Service` mode by default. (Change `operationMode` to `Debug`, `Development` or `Test` when getting ready to deploy in production.)
 
-> :new: Mac Health Check version `4.0.0b14` retains secure JSON report generation and optional Splunk HEC delivery, adds a detached `Self Service` Inspect Mode `preset6` guided summary with separate `Unhealthy` and `Healthy` sections, preserves the main dialog countdown for normal runs, and supports 15-minute cached summary replay on rerun.
- 
-<img src="images/MHC_3.2.0_failure_notification.png" alt="Health Checks" width="400"/>
+> :new: Mac Health Check version `4.0.0b15` retains secure JSON report generation and optional Splunk HEC delivery, adds a detached `Self Service` Inspect Mode `preset6` guided summary with separate `Unhealthy` and `Healthy` sections, preserves the main dialog countdown for normal runs, and supports 15-minute cached summary replay on rerun.
+
+
 
 ### Health Checks
 
@@ -164,6 +172,8 @@ The following health checks and information reporting are included in version `4
 - Wraps the finalized report as `{sourcetype, index, event}` when posting to Splunk HEC
 - Supports `splunkOperationMode=off` to disable HEC delivery explicitly while still preserving local JSON report generation
 - Preserves local report generation in `splunkOperationMode=test` while intentionally skipping network transmission
+- `Silent` plus `splunkOperationMode=production` mirrors only `Splunk Reporting:` lines to stdout; all other run output stays in `${scriptLog}`, and final exit returns success only when local report generation and HEC delivery both succeed
+- That `Silent` plus `splunkOperationMode=production` path also skips final Jamf Pro inventory submission while logging the skip to `${scriptLog}`
 - Requires `jq` for JSON validation and formatting, with local report generation and Splunk payload assembly stopping at pre-flight if `jq` is unavailable
 - Includes copy/paste Splunk SPL, Simple XML, and Dashboard Studio starter examples in [Resources/Splunk-Dashboard-Reference.md](Resources/Splunk-Dashboard-Reference.md)
 
@@ -217,7 +227,7 @@ The following health checks and information reporting are included in version `4
 ### Policy Log Reporting
 
 ```
-MHC (4.0.0b14): 2026-03-28 03:43:13 - [NOTICE] WARNING: 'localadmin' IS A MEMBER OF 'admin';
+MHC (4.0.0b15): 2026-03-28 03:43:13 - [NOTICE] WARNING: 'localadmin' IS A MEMBER OF 'admin';
 User: macOS Server Administrator (localadmin) [503] staff everyone localaccounts _appserverusr 
 admin _appserveradm com.apple.sharepoint.group.4 com.apple.sharepoint.group.3
 com.apple.sharepoint.group.1 _appstore _lpadmin _lpoperator _developer _analyticsusers
@@ -248,11 +258,15 @@ Network Time Server: time.apple.com; Jamf Pro Computer ID: 007; Site: Servers
 1. Network Time Server
 1. Jamf Pro Computer ID
 
+
+
 ## Support
 
 <a href="https://slack.com/app_redirect?channel=C0977DRT7UY" target="_blank"><img src="images/qr-code-Slack-mac-health-check.png" alt="Mac Admins Slack #mac-health-check Channel" width="300"/></a>
 
 Community-supplied, best-effort support is available on the [Mac Admins Slack](https://www.macadmins.org/) (free, registration required) [#mac-health-check Channel](https://slack.com/app_redirect?channel=C0977DRT7UY), or you can open an [issue](https://github.com/dan-snelson/Mac-Health-Check/issues).
+
+
 
 ## Deployment
 
@@ -261,11 +275,13 @@ Deployment of Mac Health Check involves configuring organizational defaults, upl
 
 <a href="https://snelson.us/mhc" target="_blank">Continue reading …</a>
 
+
+
 ## Operation Mode: Development
 
 A new "Development" Operation Mode has been added to aid in developing Health Checks, allowing the easy execution of a _single_ Health Check.
 
-When `operationMode` is set to `Development`, the current `4.0.0b14` implementation uses a dedicated `developmentListitemJSON` for a single `Microsoft Teams` check instead of running the entire suite.
+When `operationMode` is set to `Development`, the current `4.0.0b15` implementation uses a dedicated `developmentListitemJSON` for a single `Microsoft Teams` check instead of running the entire suite.
 
 ```zsh
 ####################################################################################################

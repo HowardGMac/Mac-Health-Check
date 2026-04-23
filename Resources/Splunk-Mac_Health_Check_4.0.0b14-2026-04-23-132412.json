@@ -1,5 +1,5 @@
 {
-  "title": "Mac Health Check (4.0.0b14)",
+  "title": "Mac Health Check (4.0.0b15)",
   "description": "Latest status for organization-managed Macs: macOS version, CrowdStrike, BeyondTrust PM, and Cisco Umbrella",
   "inputs": {
     "input_global_trp": {

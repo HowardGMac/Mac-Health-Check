@@ -17,7 +17,7 @@
 #
 # HISTORY
 #
-# Version 4.0.0b14, 21-Apr-2026, Dan K. Snelson (@dan-snelson)
+# Version 4.0.0b15, 23-Apr-2026, Dan K. Snelson (@dan-snelson)
 # - Added JSON health reporting (with optional Splunk HTTP Event Collector (HEC) delivery)
 # - Added a stand-alone swiftDialog Inspect Mode-flavored report (i.e., `inspectSummaryPreset="on"`), plus cached replay (i.e., `inspectReplayMaximumAgeSeconds`) for `Self Service` runs
 # - Refactored `checkElectronCornerMask` to reduce execution time
@@ -27,6 +27,7 @@
 # - Added "Next Steps" to Inspect Mode-flavored report
 # - Added `checkWiFiStrength()`; thanks, @kgolden-code!
 # - Removed `displayFailureNotification()` in favor of the Inspect Mode-flavored report
+# - Refactored `Silent` when used with `splunkOperationMode=production` to suppress non-Splunk console output
 #
 ####################################################################################################
 
@@ -41,7 +42,7 @@
 export PATH=/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin/
 
 # Script Version
-scriptVersion="4.0.0b14"
+scriptVersion="4.0.0b15"
 
 # Client-side Log
 scriptLog="/var/log/org.churchofjesuschrist.log"
@@ -246,6 +247,12 @@ case "${splunkOperationMode:l}" in
         ;;
 esac
 
+if [[ "${operationMode}" == "Silent" ]] && [[ "${splunkOperationMode}" == "production" ]]; then
+    suppressNonSplunkConsoleLogging="true"
+else
+    suppressNonSplunkConsoleLogging="false"
+fi
+
 case "${reportDebug:l}" in
     "true" | "1" | "yes" | "y" )
         splunkReportDebug="true"
@@ -404,7 +411,7 @@ if [[ -z "${totalDiskBytes}" || "${totalDiskBytes}" == "0" ]]; then
     totalDiskBytes=$( echo "${rawStorage} * 1000000000" | bc 2>/dev/null || echo "0" )
 fi
 batteryCycleCount=$( ioreg -r -c "AppleSmartBattery" | grep '"CycleCount" = ' | awk '{ print $3 }' | sed s/\"//g )
-activationLockStatus=$( system_profiler SPHardwareDataType | awk '/Activation Lock Status/{print $NF}' )
+activationLockStatus=$( system_profiler SPHardwareDataType 2>/dev/null | awk '/Activation Lock Status/{print $NF}' )
 bootstrapTokenStatus=$( profiles status -type bootstraptoken | awk '{sub(/^profiles: /, ""); printf "%s", $0; if (NR < 2) printf "; "}' | sed 's/; $//' )
 sshStatus=$( systemsetup -getremotelogin | awk -F ": " '{ print $2 }' )
 networkTimeServer=$( systemsetup -getnetworktimeserver )
@@ -812,7 +819,7 @@ fi
 progressSteps="40"
 
 # Set initial icon based on whether the Mac is a desktop or laptop
-if system_profiler SPPowerDataType | grep -q "Battery Power"; then
+if system_profiler SPPowerDataType 2>/dev/null | grep -q "Battery Power"; then
     icon="SF=laptopcomputer.and.arrow.down,${organizationColorScheme}"
 else
     icon="SF=desktopcomputer.and.arrow.down,${organizationColorScheme}"
@@ -1501,7 +1508,13 @@ fi
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 function updateScriptLog() {
-    echo "${organizationScriptName} ($scriptVersion): $( date +%Y-%m-%d\ %H:%M:%S ) - ${1}" | tee -a "${scriptLog}"
+    local logEntry="${organizationScriptName} ($scriptVersion): $( date +%Y-%m-%d\ %H:%M:%S ) - ${1}"
+
+    printf '%s\n' "${logEntry}" >> "${scriptLog}"
+
+    if [[ "${suppressNonSplunkConsoleLogging}" != "true" ]] || [[ "${1}" == *"Splunk Reporting:"* ]]; then
+        printf '%s\n' "${logEntry}"
+    fi
 }
 
 function preFlight()    { updateScriptLog "[PRE-FLIGHT]      ${1}"; }
@@ -2432,6 +2445,7 @@ function generateAndSendSplunkReport() {
         notice "Splunk Reporting: local report written to ${splunkJSONReportPath}"
     else
         addReportingError "Failed to write local JSON report to ${splunkJSONReportPath}"
+        warning "Splunk Reporting: failed to write local report to ${splunkJSONReportPath}"
     fi
 
     if [[ "${splunkOperationMode}" == "off" ]]; then
@@ -3784,6 +3798,14 @@ function quitScript() {
     fi
 
     generateAndSendSplunkReport
+
+    if [[ "${suppressNonSplunkConsoleLogging}" == "true" ]]; then
+        if [[ "${reportGenerated}" == "true" ]] && [[ "${reportTransmissionStatus}" == "success" ]]; then
+            exitCode="0"
+        else
+            exitCode="1"
+        fi
+    fi
 
     if [[ "${operationMode}" == "Self Service" ]] && inspectSummaryIsEnabled; then
         if generateInspectSummaryAssets && launchInspectSummary; then
@@ -6848,7 +6870,12 @@ function checkAirDropSettings() {
 
 function updateComputerInventory() {
 
-    notice "Updating Computer Inventory …"
+    if [[ "${operationMode}" == "Silent" ]] && [[ "${splunkOperationMode}" == "production" ]]; then
+        notice "Skipping Jamf Pro inventory update: Operation Mode is ${operationMode} and Splunk Reporting is ${splunkOperationMode}"
+        return 0
+    else
+        notice "Updating Computer Inventory …"
+    fi
 
     dialogUpdate "icon: SF=pencil.and.list.clipboard,${organizationColorScheme}"
     dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill $(echo "${organizationColorScheme}" | tr ',' ' '), iconalpha: 1, status: wait, statustext: Updating …"
@@ -6859,10 +6886,18 @@ function updateComputerInventory() {
 
         if [[ -n "${inventoryEndUsername}" ]]; then
             notice "Including '-endUsername' in 'jamf recon' (source: ${inventoryEndUsernameSource}; value: ${inventoryEndUsername})"
-            jamf recon -endUsername "${inventoryEndUsername}"
+            if [[ "${suppressNonSplunkConsoleLogging}" == "true" ]]; then
+                jamf recon -endUsername "${inventoryEndUsername}" >> "${scriptLog}" 2>&1
+            else
+                jamf recon -endUsername "${inventoryEndUsername}"
+            fi
         else
             warning "NOT including '-endUsername' in 'jamf recon' since no SSO username is available for ${loggedInUser} (source: ${inventoryEndUsernameSource}; value: <empty>)"
-            jamf recon # -verbose
+            if [[ "${suppressNonSplunkConsoleLogging}" == "true" ]]; then
+                jamf recon >> "${scriptLog}" 2>&1 # -verbose
+            else
+                jamf recon # -verbose
+            fi
         fi
 
     else
