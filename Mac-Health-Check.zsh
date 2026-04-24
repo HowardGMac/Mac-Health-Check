@@ -227,6 +227,7 @@ typeset -A checkTitleByIndex
 typeset -A checkKeyByIndex
 typeset -A checkNormalizedStatusByIndex
 typeset -A checkStatustextByIndex
+typeset -A checkInspectTextByIndex
 typeset -A checkMessageByIndex
 typeset -A checkRemediationByIndex
 typeset -A checkExecutedByIndex
@@ -1922,6 +1923,7 @@ function recordHealthCheckResult() {
 
     checkNormalizedStatusByIndex[${listItemIndex}]="${normalizedStatus}"
     checkStatustextByIndex[${listItemIndex}]="${statusText}"
+    checkInspectTextByIndex[${listItemIndex}]="${statusText}"
     checkRemediationByIndex[${listItemIndex}]="${remediationText}"
     checkMessageByIndex[${listItemIndex}]="${messageText}"
     checkExecutedByIndex[${listItemIndex}]="true"
@@ -2713,7 +2715,7 @@ function getInspectHealthyResultsSummaryText() {
 function getInspectPreferredResultTextByIndex() {
 
     local index="${1}"
-    local rawValue="${checkStatustextByIndex[${index}]}"
+    local rawValue="${checkInspectTextByIndex[${index}]}"
     local message="${checkMessageByIndex[${index}]}"
 
     if [[ -n "${rawValue}" && "${rawValue}" != "Pending ..." && "${rawValue}" != "Pending …" ]]; then
@@ -2826,6 +2828,10 @@ function getInspectExpectedComparisonTextByIndex() {
             ;;
         "Microsoft Teams" | "Fleet Desktop" )
             echo "Installed"
+            return
+            ;;
+        "Wi-Fi Strength" )
+            printf '%s\n' "Excellent >= -55" "Good >= -65" "Fair >= -75, Poor < -75"
             return
             ;;
     esac
@@ -6153,6 +6159,7 @@ function checkWiFiStrength() {
         dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorFail}, iconalpha: 0.8, subtitle: RSSI ${rssi} dBm, status: fail, statustext: ${quality}"
     fi
 
+    checkInspectTextByIndex[${1}]="${quality} (${rssi} dBm)"
     dialogUpdate "icon: SF=wifi,weight=semibold,colour=${footerStatusColor}"
     info "${humanReadableCheckName}: ${quality} (${rssi} dBm)"
 
