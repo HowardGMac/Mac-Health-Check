@@ -17,7 +17,7 @@
 #
 # HISTORY
 #
-# Version 4.0.0b16, 24-Apr-2026, Dan K. Snelson (@dan-snelson)
+# Version 4.0.0b17, 24-Apr-2026, Dan K. Snelson (@dan-snelson)
 # - Added JSON health reporting (with optional Splunk HTTP Event Collector (HEC) delivery)
 # - Added a stand-alone swiftDialog Inspect Mode-flavored report (i.e., `inspectSummaryPreset="on"`), plus cached replay (i.e., `inspectReplayMaximumAgeSeconds`) for `Self Service` runs
 # - Refactored `checkElectronCornerMask` to reduce execution time
@@ -27,7 +27,7 @@
 # - Added "Next Steps" to Inspect Mode-flavored report
 # - Added `checkWiFiStrength()`; thanks, @kgolden-code!
 # - Removed `displayFailureNotification()` in favor of the Inspect Mode-flavored report
-# - Refactored `Silent` when used with `splunkOperationMode=production` to suppress non-Splunk console output
+# - Refactored `Silent` when used with `splunkOperationMode=production` to suppress non-Splunk console output and return success when Splunk reporting succeeds, regardless of recorded health findings
 # - Refactored Palo Alto GlobalProtect-related code (inspired by @kgolden-code’s PR #88) to add support for connected-non-pa status, safe plist reads and normalized external-check output
 # - Refactored the final standard dialog to distinguish warning-only results from failures, showing `Computer Needs Attention` with an amber exclamation mark and returning exit code `0` when no checks failed
 # - Update Free Disk Space and (Folder) Size and Item Count reporting Info (thanks for PR #89, @HowardGMac!)
@@ -46,7 +46,7 @@
 export PATH=/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin/
 
 # Script Version
-scriptVersion="4.0.0b16"
+scriptVersion="4.0.0b17"
 
 # Client-side Log
 scriptLog="/var/log/org.churchofjesuschrist.log"
@@ -3846,7 +3846,7 @@ function quitScript() {
     generateAndSendSplunkReport
 
     if [[ "${suppressNonSplunkConsoleLogging}" == "true" ]]; then
-        if (( failureCheckCount > 0 )); then
+        if (( reportingErrorCount > 0 )); then
             exitCode="1"
         elif [[ "${reportGenerated}" == "true" ]] && [[ "${reportTransmissionStatus}" == "success" ]]; then
             exitCode="0"
