@@ -2,7 +2,7 @@
 
 ## CHANGELOG
 
-### 4.0.0b15 (23-Apr-2026)
+### 4.0.0b16 (24-Apr-2026)
 - Added JSON health reporting (with optional Splunk HTTP Event Collector (HEC) delivery)
 - Added a stand-alone swiftDialog Inspect Mode-flavored report (i.e., `inspectSummaryPreset="on"`), plus cached replay (i.e., `inspectReplayMaximumAgeSeconds`) for `Self Service` runs
 - Refactored `checkElectronCornerMask` to reduce execution time
@@ -12,8 +12,10 @@
 - Added "Next Steps" to Inspect Mode-flavored report
 - Added `checkWiFiStrength()`; thanks, @kgolden-code!
 - Removed `displayFailureNotification()` in favor of the Inspect Mode-flavored report
-- Refactored `Silent` when used with `splunkOperationMode=production` to suppress non-Splunk console output while still logging fully to `scriptLog`, and to return success only after Splunk report generation plus HEC delivery succeed
+- Refactored `Silent` when used with `splunkOperationMode=production` to suppress non-Splunk console output while still logging fully to `scriptLog`, and to return success only when no checks failed and Splunk report generation plus HEC delivery succeed
 - Refactored `updateComputerInventory()` to log and skip `jamf recon` during `Silent` runs when `splunkOperationMode=production`
+- Refactored Palo Alto GlobalProtect-related code (inspired by @kgolden-code’s PR #88) to add support for connected-non-pa status, safe plist reads, disconnected-as-warning behavior and normalized external-check output
+- Refactored the final standard dialog to distinguish warning-only results from failures, showing `Computer Needs Attention` with an amber exclamation mark and returning exit code `0` when no checks failed
 
 ### 3.0.0 (23-Feb-2026)
 **First (attempt at a) MDM-agnostic release**

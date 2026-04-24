@@ -1,6 +1,6 @@
 # Mac Health Check: Script Execution Flow
 
-This flowchart documents the `4.0.0b15` decision logic executed each time Mac Health Check runs, from the initial invocation through pre-flight validation, health check execution, and final output.
+This flowchart documents the `4.0.0b16` decision logic executed each time Mac Health Check runs, from the initial invocation through pre-flight validation, health check execution, and final output.
 
 ```mermaid
 graph TB
@@ -143,9 +143,9 @@ graph TB
 
     subgraph Final["🏁 Final State & Output"]
         FINALSTATE["Evaluate overall compliance<br>Update dialog to final state"]
-        FAILURES{"Failures detected?"}
+        FAILURES{"Health issues detected?"}
         WEBHOOK{"webhookURL<br>configured?"}
-        SENDWEBHOOK["Post failure summary<br>to Teams or Slack"]
+        SENDWEBHOOK["Post issue summary<br>to Teams or Slack"]
         REPORT["Write canonical local JSON report<br>and optional Splunk HEC payload"]
         COMPLETIONUI{"Non-Silent mode?"}
         INSPECTHANDOFF{"Self Service + inspectSummaryPreset=on<br>inspect handoff succeeds?"}
@@ -198,7 +198,7 @@ Set via MDM policy parameter. Determines UI behavior and which checks execute. T
 The script must run as root. If not, it calls `fatal()` and exits immediately with a log entry.
 
 ### 3. jq Availability
-The script requires `jq` for JSON validation, formatting, and dialog/listitem JSON merging. If `jq` is unavailable, `4.0.0b15` exits during pre-flight with a fatal dependency message.
+The script requires `jq` for JSON validation, formatting, and dialog/listitem JSON merging. If `jq` is unavailable, `4.0.0b16` exits during pre-flight with a fatal dependency message.
 
 ### 4. swiftDialog Version
 The script requires swiftDialog ≥ 3.1.0.4976. If the installed version is older (or swiftDialog is absent), the script downloads and installs the latest release from GitHub before proceeding.
@@ -217,7 +217,7 @@ Each health check function returns one of four statuses posted to swiftDialog vi
 - `skipped` — Check not applicable (e.g., VPN vendor set to `none`)
 
 ### 8. Webhook Delivery
-If `webhookURL` (Parameter 5) is populated and failures are detected, `quitScript()` posts a JSON payload to Microsoft Teams or Slack summarizing failed checks. The payload auto-detects the webhook type from the URL.
+If `webhookURL` (Parameter 5) is populated and health issues are detected, `quitScript()` posts a JSON payload to Microsoft Teams or Slack summarizing warning, failed, or errored checks. The payload auto-detects the webhook type from the URL.
 
 ### 9. JSON Report + Splunk Delivery
 At the end of the run, `generateAndSendSplunkReport()` writes the canonical local JSON report and, when `splunkOperationMode=production` plus Parameters 7 and 8 are configured, optionally delivers a Splunk HEC envelope. `splunkOperationMode=off` or `test` still generates the report but skips network transmission.
@@ -228,8 +228,8 @@ In `Self Service`, the script uses finalized in-memory results to generate `/var
 ### 11. Self Service Cached Replay
 If `/var/tmp/MacHealthCheck-Inspect-Config.json` is younger than `inspectReplayMaximumAgeSeconds` and the cached inspect JSON still validates, a rerun in `Self Service` skips health checks entirely, launches the cached moveable Preset 6 guided summary immediately, and exits without showing the main dialog countdown. Setting `inspectSummaryPreset="off"` disables this replay path.
 
-### 12. Unhealthy Final State
-When failures are detected, non-`Silent` runs update the main dialog to its unhealthy title and icon state, then continue through report generation, webhook delivery when configured, and the existing completion flow. In `Self Service` with `inspectSummaryPreset="on"`, the detached inspect summary remains the only post-run failure detail surface.
+### 12. Final Health State
+When health issues are detected, non-`Silent` runs update the main dialog to either `Computer Needs Attention` for warning-only results or `Computer Unhealthy` for failures and errors, then continue through report generation, webhook delivery when configured, and the existing completion flow. In `Self Service` with `inspectSummaryPreset="on"`, the detached inspect summary remains the post-run issue detail surface.
 
 ---
 

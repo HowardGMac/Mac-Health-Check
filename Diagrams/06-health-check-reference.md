@@ -1,17 +1,17 @@
 # Mac Health Check: Health Check Reference
 
-This text-only reference documents the key configurable defaults and runtime inventory for Mac Health Check `4.0.0b15`. No diagram is included; use [03-health-check-categories.md](03-health-check-categories.md) for a visual overview.
+This text-only reference documents the key configurable defaults and runtime inventory for Mac Health Check `4.0.0b16`. No diagram is included; use [03-health-check-categories.md](03-health-check-categories.md) for a visual overview.
 
 ---
 
-## 4.0.0b15 Runtime Notes
+## 4.0.0b16 Runtime Notes
 
-- `operationMode` is documented for the `4.0.0b15` release as `Self Service` by default, with `Silent`, `Debug`, `Development`, and `Test` also supported.
+- `operationMode` is documented for the `4.0.0b16` release as `Self Service` by default, with `Silent`, `Debug`, `Development`, and `Test` also supported.
 - `Self Service` runs now generate a readable inspect-summary config, launch a detached moveable swiftDialog Inspect Mode Preset 6 guided summary after the canonical report is written, separate recorded results into `Unhealthy` and `Healthy` sections, and retain the normal main-dialog completion countdown during full runs.
 - Re-running in `Self Service` can replay the cached inspect summary immediately when the handoff assets are still valid and younger than `inspectReplayMaximumAgeSeconds`.
 - `Development` mode currently runs only `checkWiFiStrength()` instead of the full vendor-specific suite.
 - `inspectSummaryPreset` is an `on` / `off` toggle: `on` enables the fixed Preset 6 inspect summary and cached replay, while `off` disables both behaviors entirely.
-- Non-`Silent` runs with failures now rely on the final unhealthy main-dialog state. In `Self Service` with `inspectSummaryPreset="on"`, the detached inspect summary remains the post-run failure-detail surface.
+- Non-`Silent` runs now distinguish warning-only results from failures in the final main-dialog state. In `Self Service` with `inspectSummaryPreset="on"`, the detached inspect summary remains the post-run issue-detail surface.
 - Pre-flight requires swiftDialog `3.1.0.4976` or newer.
 - When `enableDockIntegration` is `true`, non-`Silent` runs show a Dock icon with a decreasing `dockiconbadge` count.
 - `checkAvailableSoftwareUpdates()` includes deferred and DDM-enforced OS update handling.
@@ -68,7 +68,7 @@ The support/help experience uses both legacy support fields and dynamic `support
 | `supportLabel1`–`supportLabel6` | Mixed defaults / blanks | Dynamic support labels shown in the help message |
 | `supportValue1`–`supportValue6` | Mixed defaults / blanks | Matching dynamic support values; empty pairs are skipped |
 
-**4.0.0b15 behavior notes**
+**4.0.0b16 behavior notes**
 
 - If all `supportLabelN` / `supportValueN` pairs are blank, the script falls back to the legacy `supportTeam*` and KB values.
 - The first URL-like `supportValueN` becomes the Info button action in the dialog.

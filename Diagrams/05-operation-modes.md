@@ -1,6 +1,6 @@
 # Mac Health Check: Operation Modes
 
-This diagram compares all five `4.0.0b15` Mac Health Check operation modes, showing how each mode differs in terms of UI, Dock behavior, logging, and intended use case.
+This diagram compares all five `4.0.0b16` Mac Health Check operation modes, showing how each mode differs in terms of UI, Dock behavior, logging, and intended use case.
 
 ```mermaid
 graph TB
@@ -24,7 +24,7 @@ graph TB
 
     subgraph Debug["🔍 Debug"]
         DB_DESC["Trigger: MDM policy or manual run<br>UI: Full swiftDialog dialog<br>Anticipation: 2s between checks<br>Dock badge: Yes (when enabled)<br>Completion timer: 60s auto-close<br>Logging: Full + set -x + dialog debug flags"]
-        DB_USE["Use case:<br>Troubleshooting check failures<br>and script behavior"]
+        DB_USE["Use case:<br>Troubleshooting check issues<br>and script behavior"]
 
         style DB_DESC fill:#fff4e6
         style DB_USE fill:#ffecb3
@@ -89,12 +89,12 @@ The primary end-user-facing mode. Launched by a user clicking the Mac Health Che
 ### Silent
 Runs all health checks without displaying any user interface. Intended for scheduled background compliance runs (for example, at login or on recurring MDM check-in). The `anticipationDuration` is automatically set to `0` in this mode to minimize execution time. Results are written to the client log, persisted to the local JSON report, and, if configured, posted to a webhook or forwarded to Splunk. Dock integration and other end-user follow-up UI are suppressed.
 
-**When to use:** Continuous background compliance monitoring. Pair with a Teams or Slack webhook to surface failures without interrupting users.
+**When to use:** Continuous background compliance monitoring. Pair with a Teams or Slack webhook to surface issues without interrupting users.
 
 ---
 
 ### Debug
-Similar to Self Service, but with `set -x` tracing enabled plus swiftDialog debug launch arguments (`--verbose --resizable --debug red`). In `4.0.0b15`, Debug mode also enables pretty-printed local JSON reporting, while intentionally retaining the existing countdown-based ending instead of launching the detached inspect summary. This makes it easier to identify which part of the zsh script or dialog rendering is causing unexpected behavior.
+Similar to Self Service, but with `set -x` tracing enabled plus swiftDialog debug launch arguments (`--verbose --resizable --debug red`). In `4.0.0b16`, Debug mode also enables pretty-printed local JSON reporting, while intentionally retaining the existing countdown-based ending instead of launching the detached inspect summary. This makes it easier to identify which part of the zsh script or dialog rendering is causing unexpected behavior.
 
 **When to use:** Diagnosing why a specific check is failing or returning an unexpected status.
 

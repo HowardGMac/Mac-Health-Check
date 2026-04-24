@@ -17,7 +17,7 @@
 #
 # HISTORY
 #
-# Version 4.0.0b15, 23-Apr-2026, Dan K. Snelson (@dan-snelson)
+# Version 4.0.0b16, 24-Apr-2026, Dan K. Snelson (@dan-snelson)
 # - Added JSON health reporting (with optional Splunk HTTP Event Collector (HEC) delivery)
 # - Added a stand-alone swiftDialog Inspect Mode-flavored report (i.e., `inspectSummaryPreset="on"`), plus cached replay (i.e., `inspectReplayMaximumAgeSeconds`) for `Self Service` runs
 # - Refactored `checkElectronCornerMask` to reduce execution time
@@ -28,6 +28,8 @@
 # - Added `checkWiFiStrength()`; thanks, @kgolden-code!
 # - Removed `displayFailureNotification()` in favor of the Inspect Mode-flavored report
 # - Refactored `Silent` when used with `splunkOperationMode=production` to suppress non-Splunk console output
+# - Refactored Palo Alto GlobalProtect-related code (inspired by @kgolden-code’s PR #88) to add support for connected-non-pa status, safe plist reads and normalized external-check output
+# - Refactored the final standard dialog to distinguish warning-only results from failures, showing `Computer Needs Attention` with an amber exclamation mark and returning exit code `0` when no checks failed
 #
 ####################################################################################################
 
@@ -42,7 +44,7 @@
 export PATH=/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin/
 
 # Script Version
-scriptVersion="4.0.0b15"
+scriptVersion="4.0.0b16"
 
 # Client-side Log
 scriptLog="/var/log/org.churchofjesuschrist.log"
@@ -607,6 +609,34 @@ if [[ "${vpnClientVendor}" == "none" ]]; then
     vpnStatus="None"
 fi
 
+function globalProtectReadPlistValue() {
+
+    local plistPath="${1}"
+    local plistKey="${2}"
+
+    /usr/libexec/PlistBuddy -c "Print ${plistKey}" "${plistPath}" 2>/dev/null
+
+}
+
+function getGlobalProtectUserStatus() {
+
+    local globalProtectUserResult
+
+    if [[ -z "${loggedInUser}" ]]; then
+        echo "No console user"
+        return
+    fi
+
+    globalProtectUserResult=$( defaults read "/Users/${loggedInUser}/Library/Preferences/com.paloaltonetworks.GlobalProtect.client" User 2>/dev/null )
+
+    if [[ -z "${globalProtectUserResult}" ]]; then
+        echo "${loggedInUser} NOT logged-in"
+    else
+        echo "\"${loggedInUser}\" logged-in"
+    fi
+
+}
+
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # Palo Alto Networks GlobalProtect VPN Information
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -614,44 +644,27 @@ fi
 if [[ "${vpnClientVendor}" == "paloalto" ]]; then
     vpnAppName="GlobalProtect VPN Client"
     vpnAppPath="/Applications/GlobalProtect.app"
+    globalProtectSettingsPlist="/Library/Preferences/com.paloaltonetworks.GlobalProtect.settings.plist"
     vpnStatus="GlobalProtect is NOT installed"
 
     if [[ -d "${vpnAppPath}" ]]; then
         vpnStatus="GlobalProtect is Idle"
 
-        # Safely read the plist key; suppress "Does Not Exist" noise
-        globalProtectTunnelStatus=$(
-            /usr/libexec/PlistBuddy -c \
-                "Print :'Palo Alto Networks':GlobalProtect:DEM:'tunnel-status'" \
-                /Library/Preferences/com.paloaltonetworks.GlobalProtect.settings.plist 2>/dev/null
-        )
+        globalProtectTunnelStatus=$( globalProtectReadPlistValue "${globalProtectSettingsPlist}" ":'Palo Alto Networks':GlobalProtect:DEM:'tunnel-status'" )
 
         case "${globalProtectTunnelStatus}" in
-            "connected"*|"internal"|"connected-non-pa")
-                # Extract the IPv4 tunnel address if available
-                globalProtectVpnIP=$(
-                    /usr/libexec/PlistBuddy -c \
-                        'Print :"Palo Alto Networks":GlobalProtect:DEM:"tunnel-ip"' \
-                        /Library/Preferences/com.paloaltonetworks.GlobalProtect.settings.plist 2>/dev/null \
-                    | sed -nE 's/.*ipv4=([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+).*/\1/p'
-                )
+            "connected"*|"connected-non-pa")
+                globalProtectVpnIP=$( globalProtectReadPlistValue "${globalProtectSettingsPlist}" ':"Palo Alto Networks":GlobalProtect:DEM:"tunnel-ip"' | sed -nE 's/.*ipv4=([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+).*/\1/p' )
                 vpnStatus="Connected ${globalProtectVpnIP:-<no-IP>}"
 
                 if [[ "${vpnClientDataType}" == "extended" ]]; then
-                    globalProtectUserResult=$(
-                        defaults read "/Users/${loggedInUser}/Library/Preferences/com.paloaltonetworks.GlobalProtect.client" User 2>&1
-                    )
-
-                    case "${globalProtectUserResult}" in
-                        *"Does Not Exist"*|"")
-                            globalProtectUserResult="${loggedInUser} NOT logged-in"
-                            ;;
-                        *)
-                            globalProtectUserResult="\"${loggedInUser}\" logged-in"
-                            ;;
-                    esac
-
-                    vpnExtendedStatus="${globalProtectUserResult}"
+                    vpnExtendedStatus=$( getGlobalProtectUserStatus )
+                fi
+                ;;
+            "internal")
+                vpnStatus="Internal"
+                if [[ "${vpnClientDataType}" == "extended" ]]; then
+                    vpnExtendedStatus=$( getGlobalProtectUserStatus )
                 fi
                 ;;
             "disconnected")
@@ -3626,7 +3639,7 @@ function webHookMessage() {
                         { "type": "mrkdwn", "text": "*Timestamp:*\n${timestamp}" },
                         { "type": "mrkdwn", "text": "*User:*\n${loggedInUser}" },
                         { "type": "mrkdwn", "text": "*OS Version:*\n${osVersion} (${osBuild})" },
-                        { "type": "mrkdwn", "text": "*Health Failures:*\n${overallHealth%%; }" }
+                        { "type": "mrkdwn", "text": "*Health Issues:*\n${overallHealth%%; }" }
                     ]
                 },
                 {
@@ -3718,7 +3731,7 @@ EOF
                                     { "title": "Timestamp", "value": "${timestamp}" },
                                     { "title": "User", "value": "${loggedInUser}" },
                                     { "title": "Operating System", "value": "${osVersion} (${osBuild})" },
-                                    { "title": "Health Failures", "value": "${overallHealth%%; }" }
+                                    { "title": "Health Issues", "value": "${overallHealth%%; }" }
                                 ]
                             }
                         ],
@@ -3760,11 +3773,15 @@ EOF
 function quitScript() {
 
     local problemCheckCount=0
+    local warningCheckCount=0
+    local failureCheckCount=0
     local inspectSummaryLaunched="false"
 
     rebuildOverallHealthFromRecordedResults
     calculateOverallReportStatus
-    problemCheckCount=$(( ${#reportWarningChecks[@]} + ${#reportFailChecks[@]} + ${#reportErrorChecks[@]} ))
+    warningCheckCount="${#reportWarningChecks[@]}"
+    failureCheckCount=$(( ${#reportFailChecks[@]} + ${#reportErrorChecks[@]} ))
+    problemCheckCount=$(( warningCheckCount + failureCheckCount ))
 
     quitOut "Exiting …"
 
@@ -3778,29 +3795,52 @@ function quitScript() {
 
     esac
 
-    if [[ -n "${overallHealth}" ]]; then
-        if [[ "${operationMode}" != "Silent" ]]; then
-            dialogUpdate "icon: SF=xmark.circle, weight=bold, colour1=#BB1717, colour2=#F31F1F"
-            dialogUpdate "title: Computer Unhealthy <br>as of $( date '+%A, %B %d at %I:%M %p %Z' )"
-        fi
-        if [[ -n "${webhookURL}" ]]; then
-            info "Sending webhook message"
-            webhookStatus="Failures Detected (${problemCheckCount} issues)"
-            webHookMessage
-        fi
-        errorOut "${overallHealth%%; }"
-        exitCode="1"
-    else
-        if [[ "${operationMode}" != "Silent" ]]; then
-            dialogUpdate "icon: SF=checkmark.circle, weight=bold, colour1=#00ff44, colour2=#075c1e"
-            dialogUpdate "title: Computer Healthy <br>as of $( date '+%A, %B %d at %I:%M %p %Z' )"
-        fi
-    fi
+    case "${reportOverallStatus}" in
+
+        "warning" )
+            if [[ "${operationMode}" != "Silent" ]]; then
+                dialogUpdate "icon: SF=exclamationmark.triangle.fill, weight=bold, colour1=${statusColorError}, colour2=${statusColorError}"
+                dialogUpdate "title: Computer Needs Attention <br>as of $( date '+%A, %B %d at %I:%M %p %Z' )"
+            fi
+            if [[ -n "${webhookURL}" ]]; then
+                info "Sending webhook message"
+                webhookStatus="Warnings Detected (${problemCheckCount} issues)"
+                webHookMessage
+            fi
+            warning "${overallHealth%%; }"
+            exitCode="0"
+            ;;
+
+        "fail" | "error" )
+            if [[ "${operationMode}" != "Silent" ]]; then
+                dialogUpdate "icon: SF=xmark.circle, weight=bold, colour1=#BB1717, colour2=#F31F1F"
+                dialogUpdate "title: Computer Unhealthy <br>as of $( date '+%A, %B %d at %I:%M %p %Z' )"
+            fi
+            if [[ -n "${webhookURL}" ]]; then
+                info "Sending webhook message"
+                webhookStatus="Failures Detected (${problemCheckCount} issues)"
+                webHookMessage
+            fi
+            errorOut "${overallHealth%%; }"
+            exitCode="1"
+            ;;
+
+        * )
+            if [[ "${operationMode}" != "Silent" ]]; then
+                dialogUpdate "icon: SF=checkmark.circle, weight=bold, colour1=#00ff44, colour2=#075c1e"
+                dialogUpdate "title: Computer Healthy <br>as of $( date '+%A, %B %d at %I:%M %p %Z' )"
+            fi
+            exitCode="0"
+            ;;
+
+    esac
 
     generateAndSendSplunkReport
 
     if [[ "${suppressNonSplunkConsoleLogging}" == "true" ]]; then
-        if [[ "${reportGenerated}" == "true" ]] && [[ "${reportTransmissionStatus}" == "success" ]]; then
+        if (( failureCheckCount > 0 )); then
+            exitCode="1"
+        elif [[ "${reportGenerated}" == "true" ]] && [[ "${reportTransmissionStatus}" == "success" ]]; then
             exitCode="0"
         else
             exitCode="1"
@@ -3863,7 +3903,7 @@ function quitScript() {
 
     notice "Total Elapsed Time: $(printf '%dh:%dm:%ds\n' $((SECONDS/3600)) $((SECONDS%3600/60)) $((SECONDS%60)))"
 
-    quitOut "Goodbye!"
+    quitOut "Good manners don’t cost nothing, do they, eh?"
 
     exit "${exitCode}"
 
@@ -6163,10 +6203,16 @@ function checkVPN() {
             footerCheckIcon="SF=checkmark.circle"
             ;;
 
-        "Disconnected" )
+        "Internal" )
+            dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: On-campus / Internal network, status: success, statustext: Internal"
+            info "${vpnAppName} Internal"
+            footerCheckIcon="SF=checkmark.circle"
+            ;;
+
+        "Warning: Disconnected" | "Disconnected" )
             dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorError}, iconalpha: 1, status: error, statustext: Disconnected"
-            info "${vpnAppName} Disconnected"
-            footerCheckIcon="SF=xmark.circle"
+            warning "${vpnAppName} Disconnected"
+            footerCheckIcon="SF=exclamationmark.triangle.fill"
             footerStatusColor="${statusColorError}"
             ;;
 
@@ -6179,8 +6225,8 @@ function checkVPN() {
 
         * )
             dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorError}, iconalpha: 1, status: error, statustext: Unknown"
-            info "${vpnAppName} Unknown"
-            footerCheckIcon="SF=xmark.circle"
+            warning "${vpnAppName} Unknown"
+            footerCheckIcon="SF=exclamationmark.triangle.fill"
             footerStatusColor="${statusColorError}"
             ;;
 
@@ -6204,6 +6250,8 @@ function checkExternalJamfPro() {
     appDisplayName=$(basename "${appPath}" .app)
     local footerCheckIcon="${appPath}"
     local footerStatusColor="${statusColorSuccess}"
+    local externalCheckResult=""
+    local warningStatus=""
 
     if [[ -n $( defaults read "${organizationDefaultsDomain}" 2>/dev/null ) ]]; then
         defaults delete "${organizationDefaultsDomain}"
@@ -6219,6 +6267,9 @@ function checkExternalJamfPro() {
     dialogUpdate "progresstext: Determining status of ${appDisplayName} …"
 
     externalValidation=$( jamf policy -event $trigger | grep "Script result:" )
+    externalCheckResult="${externalValidation#*Script result: }"
+    externalCheckResult="${externalCheckResult#<result>}"
+    externalCheckResult="${externalCheckResult%</result>}"
     
     # Leverage the organization defaults domain
     if [[ -n $( defaults read "${organizationDefaultsDomain}" 2>/dev/null ) ]]; then
@@ -6243,6 +6294,19 @@ function checkExternalJamfPro() {
                 footerCheckIcon="SF=checkmark.circle"
                 ;;
 
+            "warning" )
+                warningStatus="${checkStatus}"
+                if [[ "${warningStatus:l}" == warning:* ]]; then
+                    warningStatus="${warningStatus#*: }"
+                elif [[ "${checkStatus:l}" == "warning" ]] && [[ -n "${checkExtended}" ]]; then
+                    warningStatus="${checkExtended}"
+                fi
+                dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorError}, iconalpha: 1, status: error, statustext: $warningStatus"
+                warning "${appDisplayName} Warning:$warningStatus"
+                footerCheckIcon="SF=exclamationmark.triangle.fill"
+                footerStatusColor="${statusColorError}"
+                ;;
+
             "error" | * )
                 dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorError}, iconalpha: 1, status: error, statustext: $checkStatus:$checkExtended"
                 errorOut "${appDisplayName} Error:$checkExtended"
@@ -6256,7 +6320,7 @@ function checkExternalJamfPro() {
     # Ignore the organization defaults domain
     else
 
-        case ${externalValidation:l} in
+        case ${externalCheckResult:l} in
 
             *"failed"* )
                 dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorFail}, iconalpha: 1, subtitle: Please contact ${supportTeamName}, status: fail, statustext: Failed"
@@ -6270,6 +6334,18 @@ function checkExternalJamfPro() {
                 dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: ${organizationBoilerplateComplianceMessage}, status: success, statustext: Running"
                 info "${appDisplayName} running"
                 footerCheckIcon="SF=checkmark.circle"
+                ;;
+
+            *"warning"* )
+                warningStatus="${externalCheckResult}"
+                if [[ "${warningStatus:l}" == warning:* ]]; then
+                    warningStatus="${warningStatus#*: }"
+                fi
+                [[ -z "${warningStatus}" ]] && warningStatus="Warning"
+                dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorError}, iconalpha: 1, status: error, statustext: $warningStatus"
+                warning "${appDisplayName} Warning:$warningStatus"
+                footerCheckIcon="SF=exclamationmark.triangle.fill"
+                footerStatusColor="${statusColorError}"
                 ;;
 
             *"error"* | * )

@@ -1,6 +1,6 @@
 # Mac Health Check: System Architecture
 
-This diagram shows the `4.0.0b15` Mac Health Check ecosystem, from administrator customization through MDM deployment, client-side execution, user interaction, and results output.
+This diagram shows the `4.0.0b16` Mac Health Check ecosystem, from administrator customization through MDM deployment, client-side execution, user interaction, and results output.
 
 ```mermaid
 graph TB
@@ -88,7 +88,7 @@ graph TB
         FINAL --> LOG
         FINAL --> REPORT
         INSPECT -.->|reads| INSPECTFILES
-        FINAL -.->|if webhookURL set & failures| WEBHOOK
+        FINAL -.->|if webhookURL set & issues| WEBHOOK
         CHECKLOOP -.->|Jamf Pro only| INVENTORY
 
         style LOG fill:#c8e6c9
@@ -132,7 +132,7 @@ Optional plugin scripts for third-party tools (BeyondTrust, Cisco Umbrella, Crow
 Mac Health Check is MDM-agnostic and has been tested with eight MDM platforms. The script is uploaded as a policy script and executed with optional runtime and reporting parameters:
 
 - **Parameter 4 (`operationMode`)** — Intended production default is `Self Service`; other supported modes are `Silent`, `Debug`, `Development`, and `Test`
-- **Parameter 5 (`webhookURL`)** — Optional Microsoft Teams or Slack webhook URL used when unhealthy runs need to post a failure summary
+- **Parameter 5 (`webhookURL`)** — Optional Microsoft Teams or Slack webhook URL used when runs with health issues need to post an issue summary
 - **Parameters 6-11** — Optional Splunk reporting inputs for reporting mode, HEC URL, HEC token, HEC index, HEC sourcetype, and debug formatting
 
 ---
@@ -153,7 +153,7 @@ The script inspects installed configuration profiles to identify the MDM vendor,
 
 ### Runtime Execution
 
-Health checks execute sequentially, with each result posted to the swiftDialog dialog via a named pipe (`dialogUpdate`) and captured into a structured per-check result collector for final reporting. When Dock integration is enabled, non-`Silent` runs also show a Dock icon with a decreasing badge count. After all checks complete, the main dialog updates to its final healthy / unhealthy state and `4.0.0b15` writes a final JSON health report before cleanup. In `Self Service`, a normal run also launches a detached, moveable Inspect Mode Preset 6 guided summary with separate `Unhealthy` and `Healthy` sections while the main dialog retains its standard countdown, and reruns can replay that cached summary without re-running checks when `inspectSummaryPreset="on"` and the handoff file is still younger than `inspectReplayMaximumAgeSeconds`.
+Health checks execute sequentially, with each result posted to the swiftDialog dialog via a named pipe (`dialogUpdate`) and captured into a structured per-check result collector for final reporting. When Dock integration is enabled, non-`Silent` runs also show a Dock icon with a decreasing badge count. After all checks complete, the main dialog updates to its final healthy / needs attention / unhealthy state and `4.0.0b16` writes a final JSON health report before cleanup. In `Self Service`, a normal run also launches a detached, moveable Inspect Mode Preset 6 guided summary with separate `Unhealthy` and `Healthy` sections while the main dialog retains its standard countdown, and reruns can replay that cached summary without re-running checks when `inspectSummaryPreset="on"` and the handoff file is still younger than `inspectReplayMaximumAgeSeconds`.
 
 ---
 
@@ -165,6 +165,6 @@ Health checks execute sequentially, with each result posted to the swiftDialog d
 
 **Inspect Summary** — `Self Service` runs also generate a readable handoff file at `/var/tmp/MacHealthCheck-Inspect-Config.json`, which the detached, moveable Inspect Mode Preset 6 guided summary reads during the retained main-dialog countdown and can replay on rerun when `inspectSummaryPreset="on"` plus the cached handoff file remains younger than `inspectReplayMaximumAgeSeconds`. The summary now separates recorded results into `Unhealthy` and `Healthy` sections and omits either section when no checks were recorded in that bucket. Set the toggle to `off` to disable both behaviors entirely.
 
-**Webhook** — When configured, a summary of failed checks is posted to Microsoft Teams or Slack at the end of each unhealthy run. Jamf Pro deployments include a direct link to the computer record.
+**Webhook** — When configured, a summary of warning, failed, or errored checks is posted to Microsoft Teams or Slack at the end of each run with health issues. Jamf Pro deployments include a direct link to the computer record.
 
 **MDM Inventory** — Jamf Pro deployments include `updateComputerInventory()` as the final Jamf-specific check.
