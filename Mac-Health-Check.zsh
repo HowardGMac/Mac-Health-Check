@@ -30,6 +30,7 @@
 # - Refactored `Silent` when used with `splunkOperationMode=production` to suppress non-Splunk console output
 # - Refactored Palo Alto GlobalProtect-related code (inspired by @kgolden-code’s PR #88) to add support for connected-non-pa status, safe plist reads and normalized external-check output
 # - Refactored the final standard dialog to distinguish warning-only results from failures, showing `Computer Needs Attention` with an amber exclamation mark and returning exit code `0` when no checks failed
+# - Update Free Disk Space and (Folder) Size and Item Count reporting Info (thanks for PR #89, @HowardGMac!)
 # - Enhanced Wi-Fi Strength test reporting (thanks for PR #90, @HowardGMac!)"
 #
 ####################################################################################################
@@ -2764,19 +2765,19 @@ function getInspectExpectedComparisonTextByIndex() {
             return
             ;;
         "Free Disk Space" )
-            echo "Free disk space above minimum threshold"
+            echo "At least ${allowedMinimumFreeDiskPercentage}% free"
             return
             ;;
         "Desktop Size and Item Count" )
-            echo "Desktop usage within policy"
+            echo "At most ${allowedMaximumDirectoryPercentage}% of disk"
             return
             ;;
         "Downloads Size and Item Count" )
-            echo "Downloads usage within policy"
+            echo "At most ${allowedMaximumDirectoryPercentage}% of disk"
             return
             ;;
         "Trash Size and Item Count" )
-            echo "Trash usage within policy"
+            echo "At most ${allowedMaximumDirectoryPercentage}% of disk"
             return
             ;;
         "Password Hint" )
