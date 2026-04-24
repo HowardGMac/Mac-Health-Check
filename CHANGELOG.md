@@ -16,6 +16,7 @@
 - Refactored `updateComputerInventory()` to log and skip `jamf recon` during `Silent` runs when `splunkOperationMode=production`
 - Refactored Palo Alto GlobalProtect-related code (inspired by @kgolden-code’s PR #88) to add support for connected-non-pa status, safe plist reads, disconnected-as-warning behavior and normalized external-check output
 - Refactored the final standard dialog to distinguish warning-only results from failures, showing `Computer Needs Attention` with an amber exclamation mark and returning exit code `0` when no checks failed
+- Enhanced Wi-Fi Strength test reporting (thanks for PR #90, @HowardGMac!)"
 
 ### 3.0.0 (23-Feb-2026)
 **First (attempt at a) MDM-agnostic release**

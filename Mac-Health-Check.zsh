@@ -30,6 +30,7 @@
 # - Refactored `Silent` when used with `splunkOperationMode=production` to suppress non-Splunk console output
 # - Refactored Palo Alto GlobalProtect-related code (inspired by @kgolden-code’s PR #88) to add support for connected-non-pa status, safe plist reads and normalized external-check output
 # - Refactored the final standard dialog to distinguish warning-only results from failures, showing `Computer Needs Attention` with an amber exclamation mark and returning exit code `0` when no checks failed
+# - Enhanced Wi-Fi Strength test reporting (thanks for PR #90, @HowardGMac!)"
 #
 ####################################################################################################
 
