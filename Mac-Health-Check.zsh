@@ -17,7 +17,7 @@
 #
 # HISTORY
 #
-# Version 4.0.0b18, 25-Apr-2026, Dan K. Snelson (@dan-snelson)
+# Version 4.0.0b19, 27-Apr-2026, Dan K. Snelson (@dan-snelson)
 # - Added JSON health reporting (with optional Splunk HTTP Event Collector (HEC) delivery)
 # - Added a stand-alone swiftDialog Inspect Mode-flavored report (i.e., `inspectSummaryPreset="on"`), plus cached replay (i.e., `inspectReplayMaximumAgeSeconds`) for `Self Service` runs
 # - Refactored `checkElectronCornerMask` to reduce execution time
@@ -35,6 +35,10 @@
 # - Added Client-Side Cache nightly cache generation and Jamf Pro cached Splunk upload optimization
 # - Added LaunchDaemon deployment for a local daily `Silent` report refresh with deterministic per-Mac jitter around 1:23 a.m.
 # - Sanitized the client-side script copy so it does not perform Jamf inventory submission
+# - Fixed duplicate prefixed `Silent` log lines from LaunchDaemon runs by making MHC logging the only writer to `scriptLog`
+# - Fixed truncated command-preview log entries from user-context helpers by joining command arguments before logging
+# - Normalized client-side cache, LaunchDaemon, and Jamf external-check helper output so field logs stay MHC-prefixed
+# - Tightened cached-report validation and reporting state for cached Splunk uploads
 #
 ####################################################################################################
 
@@ -49,7 +53,7 @@
 export PATH=/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin/
 
 # Script Version
-scriptVersion="4.0.0b18"
+scriptVersion="4.0.0b19"
 
 # Client-side Log
 scriptLog="/var/log/org.churchofjesuschrist.log"
@@ -129,29 +133,6 @@ function calculateClientSideJitterOffset() {
 
 }
 
-if [[ "${launchDaemonRun}" == "true" ]] && [[ "${clientSideJitterEnabled:l}" == "true" ]]; then
-
-    jitterOffset=$( calculateClientSideJitterOffset )
-    if [[ "${jitterOffset}" != -<-> && "${jitterOffset}" != <-> ]]; then
-        jitterOffset="0"
-    fi
-
-    jitterSleepSeconds=$(( jitterOffset + clientSideMaxJitterSeconds ))
-    (( jitterSleepSeconds < 0 )) && jitterSleepSeconds="0"
-    (( jitterSleepSeconds > ( clientSideMaxJitterSeconds * 2 ) )) && jitterSleepSeconds=$(( clientSideMaxJitterSeconds * 2 ))
-
-    echo "Client-Side Cache: Jitter offset = ${jitterOffset} seconds"
-    if [[ -n "${scriptLog}" ]]; then
-        printf '%s\n' "Client-Side Cache: Jitter offset = ${jitterOffset} seconds; sleeping ${jitterSleepSeconds} seconds" >> "${scriptLog}" 2>/dev/null
-    fi
-
-    if (( jitterSleepSeconds > 0 )); then
-        echo "Client-Side Cache: Sleeping ${jitterSleepSeconds} seconds to stagger load..."
-        sleep "${jitterSleepSeconds}"
-    fi
-
-fi
-
 # Parameter 6: Splunk reporting mode [ off | test | production ]
 splunkOperationMode="${6:-"test"}"
 
@@ -199,6 +180,46 @@ currentScriptPath="${0:A}"
 
 # Splunk and JSON reporting defaults
 splunkJSONReportPath="/var/tmp/MacHealthCheck-Report.json"
+cachedReportJSON=""
+cachedReportModificationEpoch="0"
+cachedReportAgeSeconds="0"
+cachedReportValidationStatus="not_checked"
+
+function validateCachedSplunkReport() {
+
+    local cachedReportPath="${1:-${splunkJSONReportPath}}"
+
+    cachedReportJSON=""
+    cachedReportModificationEpoch="0"
+    cachedReportAgeSeconds="0"
+    cachedReportValidationStatus="missing"
+
+    if [[ ! -f "${cachedReportPath}" ]]; then
+        return 1
+    fi
+
+    cachedReportModificationEpoch=$( stat -f %m "${cachedReportPath}" 2>/dev/null )
+    if [[ "${cachedReportModificationEpoch}" != <-> ]] || (( cachedReportModificationEpoch <= 0 )); then
+        cachedReportValidationStatus="invalid_mtime"
+        return 1
+    fi
+
+    cachedReportAgeSeconds=$(( $( date +%s ) - cachedReportModificationEpoch ))
+    if (( cachedReportAgeSeconds > clientSideMaximumCacheAgeSeconds )); then
+        cachedReportValidationStatus="stale"
+        return 1
+    fi
+
+    cachedReportJSON="$( < "${cachedReportPath}" )"
+    if ! printf '%s' "${cachedReportJSON}" | jq -e . >/dev/null 2>&1; then
+        cachedReportValidationStatus="invalid_json"
+        return 1
+    fi
+
+    cachedReportValidationStatus="valid"
+    return 0
+
+}
 
 case "${splunkOperationMode:l}" in
     "off" )
@@ -224,6 +245,9 @@ fi
 function clientSideEarlyLog() {
 
     local messageText="${1}"
+
+    messageText="${messageText//$'\r'/ }"
+    messageText="${messageText//$'\n'/; }"
     local logEntry="${organizationScriptName} (${scriptVersion}): $( date +%Y-%m-%d\ %H:%M:%S ) - [NOTICE]          Client-Side Cache: ${messageText}"
 
     printf '%s\n' "${logEntry}" >> "${scriptLog}" 2>/dev/null
@@ -247,30 +271,24 @@ if [[ "${operationMode}" == "Silent" ]] && [[ "${splunkOperationMode}" == "produ
 
         if [[ "${clientVersion}" == "${scriptVersion}" ]]; then
 
-            if [[ -f "${splunkJSONReportPath}" ]]; then
-
-                cachedReportModificationEpoch=$( stat -f %m "${splunkJSONReportPath}" 2>/dev/null )
-                cachedReportAgeSeconds=$(( $( date +%s ) - ${cachedReportModificationEpoch:-0} ))
-
-                if (( cachedReportModificationEpoch > 0 )) && (( cachedReportAgeSeconds <= clientSideMaximumCacheAgeSeconds )); then
-
-                    if jq -e . "${splunkJSONReportPath}" >/dev/null 2>&1; then
-                        clientSideSkipChecks="true"
-                        clientSideEarlyLog "Client-side script version matches (${scriptVersion}); cached report is valid and ${cachedReportAgeSeconds}s old. Skipping health checks."
-                    else
-                        clientSideEarlyLog "Cached report exists but is invalid JSON. Falling back to full health check."
-                    fi
-
-                else
-
-                    clientSideEarlyLog "Cached report is stale (${cachedReportAgeSeconds}s old; maximum ${clientSideMaximumCacheAgeSeconds}s). Falling back to full health check."
-
-                fi
-
+            if validateCachedSplunkReport "${splunkJSONReportPath}"; then
+                clientSideSkipChecks="true"
+                clientSideEarlyLog "Client-side script version matches (${scriptVersion}); cached report is valid and ${cachedReportAgeSeconds}s old. Skipping health checks."
             else
-
-                clientSideEarlyLog "Client-side script version matches (${scriptVersion}) but no cached report exists. Falling back to full health check."
-
+                case "${cachedReportValidationStatus}" in
+                    "missing" )
+                        clientSideEarlyLog "Client-side script version matches (${scriptVersion}) but no cached report exists. Falling back to full health check."
+                        ;;
+                    "invalid_json" )
+                        clientSideEarlyLog "Cached report exists but is invalid JSON. Falling back to full health check."
+                        ;;
+                    "stale" )
+                        clientSideEarlyLog "Cached report is stale (${cachedReportAgeSeconds}s old; maximum ${clientSideMaximumCacheAgeSeconds}s). Falling back to full health check."
+                        ;;
+                    * )
+                        clientSideEarlyLog "Cached report could not be validated (${cachedReportValidationStatus}). Falling back to full health check."
+                        ;;
+                esac
             fi
 
         else
@@ -1709,11 +1727,16 @@ fi
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 function updateScriptLog() {
-    local logEntry="${organizationScriptName} ($scriptVersion): $( date +%Y-%m-%d\ %H:%M:%S ) - ${1}"
+    local messageText="${1}"
+    local logEntry=""
+
+    messageText="${messageText//$'\r'/ }"
+    messageText="${messageText//$'\n'/; }"
+    logEntry="${organizationScriptName} ($scriptVersion): $( date +%Y-%m-%d\ %H:%M:%S ) - ${messageText}"
 
     printf '%s\n' "${logEntry}" >> "${scriptLog}"
 
-    if [[ "${suppressNonSplunkConsoleLogging}" != "true" ]] || [[ "${1}" == *"Splunk Reporting:"* ]]; then
+    if [[ "${suppressNonSplunkConsoleLogging}" != "true" ]] || [[ "${messageText}" == *"Splunk Reporting:"* ]]; then
         printf '%s\n' "${logEntry}"
     fi
 }
@@ -1909,10 +1932,39 @@ function dialogUpdate(){
 # Run command as logged-in user (thanks, @scriptingosx!)
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
+function formatCommandForLog() {
+
+    local -a commandArguments=( "$@" )
+    local -a quotedArguments
+
+    quotedArguments=( "${(@q)commandArguments}" )
+    printf '%s' "${(j: :)quotedArguments}"
+
+}
+
 function runAsUser() {
 
-    info "Run \"$@\" as \"$loggedInUserID\" … " 1>&2
+    local commandPreview=""
+
+    commandPreview="$( formatCommandForLog "$@" )"
+    info "Run \"${commandPreview}\" as \"$loggedInUserID\" … " 1>&2
     launchctl asuser "$loggedInUserID" sudo -u "$loggedInUser" "$@"
+
+}
+
+function captureRunAsUserOutput() {
+
+    local commandPreview=""
+    local commandOutput=""
+    local commandExitCode=0
+
+    commandPreview="$( formatCommandForLog "$@" )"
+    info "Run \"${commandPreview}\" as \"$loggedInUserID\" … " 1>&2
+    commandOutput="$( launchctl asuser "$loggedInUserID" sudo -u "$loggedInUser" "$@" 2>&1 )"
+    commandExitCode=$?
+
+    printf '%s' "${commandOutput}"
+    return "${commandExitCode}"
 
 }
 
@@ -1921,8 +1973,10 @@ function runHomebrewAsUser() {
     local brewBinary="${1}"
     shift
     local homebrewPath="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+    local commandPreview=""
 
-    info "Run Homebrew \"${brewBinary} $*\" as \"${loggedInUserID}\" … " 1>&2
+    commandPreview="$( formatCommandForLog "${brewBinary}" "$@" )"
+    info "Run Homebrew \"${commandPreview}\" as \"${loggedInUserID}\" … " 1>&2
     launchctl asuser "${loggedInUserID}" sudo -H -u "${loggedInUser}" env \
         HOME="${loggedInUserHomeDirectory}" \
         USER="${loggedInUser}" \
@@ -2674,28 +2728,24 @@ function generateAndSendSplunkReport() {
 
 function sendCachedSplunkReport() {
 
-    local cachedReportJSON=""
-    local cachedReportModificationEpoch=""
-    local cachedReportAgeSeconds=0
-
     notice "Client-Side Cache: uploading cached Splunk JSON report from ${splunkJSONReportPath}"
 
-    if [[ ! -f "${splunkJSONReportPath}" ]]; then
-        warning "Client-Side Cache: cached report missing; unable to upload cached report."
-        return 1
-    fi
-
-    cachedReportModificationEpoch=$( stat -f %m "${splunkJSONReportPath}" 2>/dev/null )
-    cachedReportAgeSeconds=$(( $( date +%s ) - ${cachedReportModificationEpoch:-0} ))
-    if (( cachedReportModificationEpoch <= 0 )) || (( cachedReportAgeSeconds > clientSideMaximumCacheAgeSeconds )); then
-        warning "Client-Side Cache: cached report is stale (${cachedReportAgeSeconds}s old; maximum ${clientSideMaximumCacheAgeSeconds}s); unable to upload cached report."
-        return 1
-    fi
-
-    cachedReportJSON="$( < "${splunkJSONReportPath}" )"
-
-    if ! validateJson "${cachedReportJSON}"; then
-        warning "Client-Side Cache: cached report failed JSON validation; unable to upload cached report."
+    if ! validateCachedSplunkReport "${splunkJSONReportPath}"; then
+        reportTransmissionStatus="failed"
+        case "${cachedReportValidationStatus}" in
+            "missing" )
+                warning "Client-Side Cache: cached report missing; unable to upload cached report."
+                ;;
+            "invalid_json" )
+                warning "Client-Side Cache: cached report failed JSON validation; unable to upload cached report."
+                ;;
+            "stale" )
+                warning "Client-Side Cache: cached report is stale (${cachedReportAgeSeconds}s old; maximum ${clientSideMaximumCacheAgeSeconds}s); unable to upload cached report."
+                ;;
+            * )
+                warning "Client-Side Cache: cached report could not be validated (${cachedReportValidationStatus}); unable to upload cached report."
+                ;;
+        esac
         return 1
     fi
 
@@ -2705,7 +2755,6 @@ function sendCachedSplunkReport() {
         return 1
     fi
 
-    reportGenerated="true"
     reportHECPayload="$( compactJson "$( buildSplunkHECPayload "$( compactJson "${cachedReportJSON}" )" )" )"
 
     sendSplunkHECPayload "${reportHECPayload}"
@@ -2715,6 +2764,8 @@ function sendCachedSplunkReport() {
 function installClientSideScript() {
 
     local temporaryClientScript=""
+    local launchctlOutput=""
+    local launchDaemonValidationOutput=""
 
     notice "Client-Side Cache: installing client-side script at ${clientSideScriptPath}"
 
@@ -2809,30 +2860,38 @@ function installClientSideScript() {
         </dict>
     </array>
     <key>StandardErrorPath</key>
-    <string>${scriptLog}</string>
+    <string>/dev/null</string>
     <key>StandardOutPath</key>
-    <string>${scriptLog}</string>
+    <string>/dev/null</string>
 </dict>
 </plist>
 ENDOFLAUNCHDAEMON
 
-    if ! plutil -lint "${launchDaemonPath}" >> "${scriptLog}" 2>&1; then
-        warning "Client-Side Cache: generated LaunchDaemon plist failed validation at ${launchDaemonPath}"
+    if ! launchDaemonValidationOutput=$( plutil -lint "${launchDaemonPath}" 2>&1 ); then
+        warning "Client-Side Cache: generated LaunchDaemon plist failed validation at ${launchDaemonPath}: ${launchDaemonValidationOutput}"
         return 1
+    else
+        info "Client-Side Cache: generated LaunchDaemon plist validated at ${launchDaemonPath}"
     fi
 
     chown root:wheel "${launchDaemonPath}" 2>/dev/null
     chmod 644 "${launchDaemonPath}" 2>/dev/null
 
     if launchctl print "system/${launchDaemonLabel}" >/dev/null 2>&1; then
-        launchctl bootout "system/${launchDaemonLabel}" >> "${scriptLog}" 2>&1 || true
+        if ! launchctlOutput=$( launchctl bootout "system/${launchDaemonLabel}" 2>&1 ); then
+            info "Client-Side Cache: launchctl bootout returned non-zero for ${launchDaemonLabel}: ${launchctlOutput}"
+        fi
     fi
-    launchctl enable "system/${launchDaemonLabel}" >> "${scriptLog}" 2>&1 || true
-    if ! launchctl bootstrap system "${launchDaemonPath}" >> "${scriptLog}" 2>&1; then
-        warning "Client-Side Cache: unable to bootstrap ${launchDaemonPath}"
+    if ! launchctlOutput=$( launchctl enable "system/${launchDaemonLabel}" 2>&1 ); then
+        info "Client-Side Cache: launchctl enable returned non-zero before bootstrap for ${launchDaemonLabel}: ${launchctlOutput}"
+    fi
+    if ! launchctlOutput=$( launchctl bootstrap system "${launchDaemonPath}" 2>&1 ); then
+        warning "Client-Side Cache: unable to bootstrap ${launchDaemonPath}: ${launchctlOutput}"
         return 1
     fi
-    launchctl enable "system/${launchDaemonLabel}" >> "${scriptLog}" 2>&1
+    if ! launchctlOutput=$( launchctl enable "system/${launchDaemonLabel}" 2>&1 ); then
+        info "Client-Side Cache: launchctl enable returned non-zero after bootstrap for ${launchDaemonLabel}: ${launchctlOutput}"
+    fi
 
     notice "Client-Side Cache: installed client-side script and LaunchDaemon ${launchDaemonLabel}."
     return 0
@@ -4310,6 +4369,31 @@ if [[ ! -f "${scriptLog}" ]]; then
     fi
 else
     # preFlight "Specified scriptLog '${scriptLog}' exists; writing log entries to it"
+fi
+
+
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# Pre-flight Check: Client-Side Cache Jitter
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+if [[ "${launchDaemonRun}" == "true" ]] && [[ "${clientSideJitterEnabled:l}" == "true" ]]; then
+
+    jitterOffset=$( calculateClientSideJitterOffset )
+    if [[ "${jitterOffset}" != -<-> && "${jitterOffset}" != <-> ]]; then
+        jitterOffset="0"
+    fi
+
+    jitterSleepSeconds=$(( jitterOffset + clientSideMaxJitterSeconds ))
+    (( jitterSleepSeconds < 0 )) && jitterSleepSeconds="0"
+    (( jitterSleepSeconds > ( clientSideMaxJitterSeconds * 2 ) )) && jitterSleepSeconds=$(( clientSideMaxJitterSeconds * 2 ))
+
+    notice "Client-Side Cache: Jitter offset = ${jitterOffset} seconds; sleeping ${jitterSleepSeconds} seconds."
+
+    if (( jitterSleepSeconds > 0 )); then
+        sleep "${jitterSleepSeconds}"
+    fi
+
 fi
 
 
@@ -6632,6 +6716,9 @@ function checkExternalJamfPro() {
     local footerStatusColor="${statusColorSuccess}"
     local externalCheckResult=""
     local warningStatus=""
+    local externalValidation=""
+    local externalPolicyOutput=""
+    local externalPolicyExitCode=0
 
     if [[ -n $( defaults read "${organizationDefaultsDomain}" 2>/dev/null ) ]]; then
         defaults delete "${organizationDefaultsDomain}"
@@ -6646,7 +6733,12 @@ function checkExternalJamfPro() {
     dialogUpdate "progress: increment"
     dialogUpdate "progresstext: Determining status of ${appDisplayName} …"
 
-    externalValidation=$( jamf policy -event $trigger | grep "Script result:" )
+    externalPolicyOutput=$( jamf policy -event "${trigger}" 2>&1 )
+    externalPolicyExitCode=$?
+    if (( externalPolicyExitCode != 0 )); then
+        info "External Check: Jamf policy trigger '${trigger}' exited ${externalPolicyExitCode}; evaluating available result output."
+    fi
+    externalValidation=$( printf '%s\n' "${externalPolicyOutput}" | grep "Script result:" | tail -1 )
     externalCheckResult="${externalValidation#*Script result: }"
     externalCheckResult="${externalCheckResult#<result>}"
     externalCheckResult="${externalCheckResult%</result>}"
@@ -7130,7 +7222,7 @@ function checkBluetoothSharing() {
     sleep "${anticipationDuration}"
     
     # Check Bluetooth sharing settings using -currentHost as per macOS Security Compliance Project
-    local result=$(runAsUser defaults -currentHost read com.apple.Bluetooth PrefKeyServicesEnabled 2>&1 | grep -v "Run" | tail -1)
+    local result=$( captureRunAsUserOutput defaults -currentHost read com.apple.Bluetooth PrefKeyServicesEnabled )
     
     # If the key doesn't exist or is 0, Bluetooth sharing is disabled (compliant)
     if [[ "${result}" == "0" ]] || [[ "${result}" =~ "does not exist" ]]; then
@@ -7216,17 +7308,17 @@ function checkAirPlayReceiver() {
     local keyFound=""
     
     # Try the new correctly-spelled key first (macOS 26.1+)
-    result=$(runAsUser /usr/bin/defaults -currentHost read com.apple.controlcenter AirplayReceiverEnabled 2>&1 | grep -v "Run" | tail -1)
+    result=$( captureRunAsUserOutput /usr/bin/defaults -currentHost read com.apple.controlcenter AirplayReceiverEnabled )
     if [[ ! "${result}" =~ "does not exist" ]]; then
         keyFound="AirplayReceiverEnabled"
     else
         # Try the misspelled key (older versions)
-        result=$(runAsUser /usr/bin/defaults -currentHost read com.apple.controlcenter AirplayRecieverEnabled 2>&1 | grep -v "Run" | tail -1)
+        result=$( captureRunAsUserOutput /usr/bin/defaults -currentHost read com.apple.controlcenter AirplayRecieverEnabled )
         if [[ ! "${result}" =~ "does not exist" ]]; then
             keyFound="AirplayRecieverEnabled"
         else
             # Try the advertising key (macOS 26.0)
-            result=$(runAsUser /usr/bin/defaults -currentHost read com.apple.controlcenter AirplayReceiverAdvertising 2>&1 | grep -v "Run" | tail -1)
+            result=$( captureRunAsUserOutput /usr/bin/defaults -currentHost read com.apple.controlcenter AirplayReceiverAdvertising )
             if [[ ! "${result}" =~ "does not exist" ]]; then
                 keyFound="AirplayReceiverAdvertising"
             fi
@@ -7301,7 +7393,7 @@ function checkAirDropSettings() {
     sleep "${anticipationDuration}"
     
     # Check AirDrop settings
-    local result=$(runAsUser defaults read /Users/"${loggedInUser}"/Library/Preferences/com.apple.sharingd.plist DiscoverableMode 2>&1 | grep -v "Run" | tail -1)
+    local result=$( captureRunAsUserOutput defaults read /Users/"${loggedInUser}"/Library/Preferences/com.apple.sharingd.plist DiscoverableMode )
     
     if [[ "${result}" != "Everyone" ]] || [[ -z "${result}" ]]; then
         info "${humanReadableCheckName}: Compliant"

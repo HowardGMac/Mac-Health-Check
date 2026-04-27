@@ -2,7 +2,7 @@
 
 ## CHANGELOG
 
-### 4.0.0b18 (25-Apr-2026)
+### 4.0.0b19 (27-Apr-2026)
 - Added JSON health reporting (with optional Splunk HTTP Event Collector (HEC) delivery)
 - Added a stand-alone swiftDialog Inspect Mode-flavored report (i.e., `inspectSummaryPreset="on"`), plus cached replay (i.e., `inspectReplayMaximumAgeSeconds`) for `Self Service` runs
 - Refactored `checkElectronCornerMask` to reduce execution time
@@ -24,6 +24,10 @@
 - Added LaunchDaemon deployment for a local daily `Silent` report refresh with deterministic per-Mac jitter around 1:23 a.m.
 - Added a LaunchDaemon-only loginwindow `lastUserName` fallback for user-scoped checks when no GUI user is active
 - Sanitized the client-side script copy so it does not perform Jamf inventory submission
+- Fixed duplicate prefixed `Silent` log lines from LaunchDaemon-triggered client-side runs by routing LaunchDaemon stdout/stderr to `/dev/null` and keeping `updateScriptLog()` as the single MHC-prefixed writer to `scriptLog`
+- Fixed truncated `Run` command-preview log entries by joining and quoting command arguments before logging user-context helper invocations
+- Normalized client-side cache, LaunchDaemon validation/loading, and Jamf external-check helper output so field logs stay MHC-prefixed
+- Tightened cached-report validation and cached Splunk upload state so cached upload failures no longer look like successful report generation
 
 ### 3.0.0 (23-Feb-2026)
 **First (attempt at a) MDM-agnostic release**

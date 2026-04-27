@@ -1,6 +1,6 @@
 # Mac Health Check: Script Execution Flow
 
-This flowchart documents the `4.0.0b18` decision logic executed each time Mac Health Check runs, from the initial invocation through pre-flight validation, health check execution, and final output.
+This flowchart documents the `4.0.0b19` decision logic executed each time Mac Health Check runs, from the initial invocation through pre-flight validation, health check execution, and final output.
 
 ```mermaid
 graph TB
@@ -231,7 +231,7 @@ Set via MDM policy parameter. Determines UI behavior and which checks execute. T
 The script must run as root. If not, it calls `fatal()` and exits immediately with a log entry.
 
 ### 3. jq Availability
-The script requires `jq` for JSON validation, formatting, and dialog/listitem JSON merging. If `jq` is unavailable, `4.0.0b18` exits during pre-flight with a fatal dependency message.
+The script requires `jq` for JSON validation, formatting, and dialog/listitem JSON merging. If `jq` is unavailable, `4.0.0b19` exits during pre-flight with a fatal dependency message.
 
 ### 4. swiftDialog Version
 The script requires swiftDialog ≥ 3.1.0.4976. If the installed version is older (or swiftDialog is absent), the script downloads and installs the latest release from GitHub before proceeding.
@@ -256,7 +256,7 @@ Each health check function returns one of four statuses posted to swiftDialog vi
 If `webhookURL` (Parameter 5) is populated and health issues are detected, `quitScript()` posts a JSON payload to Microsoft Teams or Slack summarizing warning, failed, or errored checks. The payload auto-detects the webhook type from the URL.
 
 ### 10. JSON Report + Splunk Delivery
-At the end of the run, `generateAndSendSplunkReport()` writes the canonical local JSON report and, when `splunkOperationMode=production` plus Parameters 7 and 8 are configured, optionally delivers a Splunk HEC envelope. `splunkOperationMode=off` or `test` still generates the report but skips network transmission. The Client-Side Cache LaunchDaemon uses the local client copy with `Silent` + default `splunkOperationMode=test`, refreshing the report without storing HEC secrets on disk. The daemon does not use `RunAtLoad`; scheduled runs set `launchDaemonRun=true`, and the client script uses that marker to apply deterministic hardware-derived jitter only for daemon-triggered runs.
+At the end of the run, `generateAndSendSplunkReport()` writes the canonical local JSON report and, when `splunkOperationMode=production` plus Parameters 7 and 8 are configured, optionally delivers a Splunk HEC envelope. `splunkOperationMode=off` or `test` still generates the report but skips network transmission. The Client-Side Cache LaunchDaemon uses the local client copy with `Silent` + default `splunkOperationMode=test`, refreshing the report without storing HEC secrets on disk. The daemon does not use `RunAtLoad`; scheduled runs set `launchDaemonRun=true`, the client script uses that marker to apply deterministic hardware-derived jitter only for daemon-triggered runs, and daemon stdout/stderr route to `/dev/null` so MHC-prefixed log writes remain single entries.
 
 ### 11. Self Service Inspect Summary
 In `Self Service`, the script uses finalized in-memory results to generate `/var/tmp/MacHealthCheck-Inspect-Config.json`, then tries to launch a detached, moveable swiftDialog Inspect Mode Preset 6 guided summary. That summary now separates recorded results into `Unhealthy` and `Healthy` sections and omits either section when that bucket is empty. On a normal run, the existing `completionTimer` countdown remains on the main dialog whether the detached summary launches or not. Set `inspectSummaryPreset="off"` to skip both the handoff generation and detached launch.

@@ -1,6 +1,6 @@
 # Mac Health Check: Operation Modes
 
-This diagram compares all five `4.0.0b18` Mac Health Check operation modes, showing how each mode differs in terms of UI, Dock behavior, logging, and intended use case.
+This diagram compares all five `4.0.0b19` Mac Health Check operation modes, showing how each mode differs in terms of UI, Dock behavior, logging, and intended use case.
 
 ```mermaid
 graph TB
@@ -87,14 +87,14 @@ The primary end-user-facing mode. Launched by a user clicking the Mac Health Che
 ---
 
 ### Silent
-Runs health checks without displaying any user interface. Intended for scheduled background compliance runs and Client-Side Cache nightly cache refreshes. The `anticipationDuration` is automatically set to `0` in this mode to minimize execution time. Results are written to the client log and persisted to `/var/tmp/MacHealthCheck-Report.json`. The client-side LaunchDaemon run uses `splunkOperationMode=test`, so Splunk secrets stay in Jamf Pro policy parameters. Its plist has no `RunAtLoad`; scheduled runs set `launchDaemonRun=true`, causing the script to apply deterministic per-Mac jitter across the 00:53-01:53 window centered on 1:23 a.m. If no GUI user is active during that refresh, user-scoped checks fall back to loginwindow `lastUserName`. When Jamf Pro later runs `Silent` with `splunkOperationMode=production`, the script uploads the cached report without running checks if the client-side script version matches and the cache is valid and younger than 36 hours. Dock integration and other end-user follow-up UI are suppressed.
+Runs health checks without displaying any user interface. Intended for scheduled background compliance runs and Client-Side Cache nightly cache refreshes. The `anticipationDuration` is automatically set to `0` in this mode to minimize execution time. Results are written to the client log and persisted to `/var/tmp/MacHealthCheck-Report.json`. The client-side LaunchDaemon run uses `splunkOperationMode=test`, so Splunk secrets stay in Jamf Pro policy parameters. Its plist has no `RunAtLoad`, routes stdout/stderr to `/dev/null`, and scheduled runs set `launchDaemonRun=true`, causing the script to apply deterministic per-Mac jitter across the 00:53-01:53 window centered on 1:23 a.m. If no GUI user is active during that refresh, user-scoped checks fall back to loginwindow `lastUserName`. When Jamf Pro later runs `Silent` with `splunkOperationMode=production`, the script uploads the cached report without running checks if the client-side script version matches and the cache is valid and younger than 36 hours. Dock integration and other end-user follow-up UI are suppressed.
 
 **When to use:** Continuous background compliance monitoring, nightly local report cache refreshes, and Jamf Pro Splunk uploads without repeating a full health-check run.
 
 ---
 
 ### Debug
-Similar to Self Service, but with `set -x` tracing enabled plus swiftDialog debug launch arguments (`--verbose --resizable --debug red`). In `4.0.0b18`, Debug mode also enables pretty-printed local JSON reporting, while intentionally retaining the existing countdown-based ending instead of launching the detached inspect summary. This makes it easier to identify which part of the zsh script or dialog rendering is causing unexpected behavior.
+Similar to Self Service, but with `set -x` tracing enabled plus swiftDialog debug launch arguments (`--verbose --resizable --debug red`). In `4.0.0b19`, Debug mode also enables pretty-printed local JSON reporting, while intentionally retaining the existing countdown-based ending instead of launching the detached inspect summary. This makes it easier to identify which part of the zsh script or dialog rendering is causing unexpected behavior.
 
 **When to use:** Diagnosing why a specific check is failing or returning an unexpected status.
 

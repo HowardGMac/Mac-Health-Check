@@ -1,6 +1,6 @@
 # Mac Health Check: Deployment Workflow
 
-This diagram provides a step-by-step guide for deploying the `4.0.0b18` release of Mac Health Check through an MDM solution. Follow the phases in order for a successful deployment.
+This diagram provides a step-by-step guide for deploying the `4.0.0b19` release of Mac Health Check through an MDM solution. Follow the phases in order for a successful deployment.
 
 ```mermaid
 graph TB
@@ -232,7 +232,7 @@ For background compliance monitoring, create a second policy:
 - **Trigger:** Login, recurring check-in, or scheduled
 - **No Self Service entry** — runs silently in the background
 - **Splunk parameters:** Provide HEC URL/token/index/sourcetype from Jamf Pro policy parameters only
-- **Client-Side Cache:** Non-`Silent` runs and full Jamf production runs install `/Library/Management/org.churchofjesuschrist/MHC.zsh` plus `org.churchofjesuschrist.MHC`; the script validates and loads a root LaunchDaemon without `RunAtLoad`, and the client-side LaunchDaemon refreshes the local JSON report nightly with deterministic per-Mac jitter across 00:53-01:53 without uploading to Splunk
+- **Client-Side Cache:** Non-`Silent` runs and full Jamf production runs install `/Library/Management/org.churchofjesuschrist/MHC.zsh` plus `org.churchofjesuschrist.MHC`; the script validates and loads a root LaunchDaemon without `RunAtLoad`, routes daemon stdout/stderr to `/dev/null`, and the client-side LaunchDaemon refreshes the local JSON report nightly with deterministic per-Mac jitter across 00:53-01:53 without uploading to Splunk
 - When Jamf Pro runs `Silent` + `production`, matching client/server versions and a valid report under 36 hours old allow cached upload without re-running health checks
 
 ---
