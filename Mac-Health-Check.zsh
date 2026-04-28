@@ -3712,11 +3712,10 @@ function buildInspectSummaryComparisonTableJSON() {
 function buildInspectOverviewGuidanceContentJSON() {
 
     printf '%s' "["
-    printf '%s' "{\"content\":\"Mac Health Check Flow\",\"phases\":[\"Checks Complete\",\"Report Written\",\"Summary Available\",\"Cached Report Expires\"],\"currentPhase\":3,\"style\":\"stepper\",\"type\":\"phase-tracker\"},"
+    printf '%s' "{\"content\":$( jsonString "$( getInspectReplayExpirationMessage )" ),\"type\":\"info\"},"
     printf '%s' "{\"content\":$( jsonString "$( getInspectIntroductionText )" ),\"type\":\"text\"},"
     printf '%s' "{\"type\":\"compliance-summary\",\"label\":\"Overall Compliance Status\"},"
-    printf '%s' "{\"type\":\"findings-list\"},"
-    printf '%s' "{\"content\":$( jsonString "$( getInspectReplayExpirationMessage )" ),\"type\":\"info\"}"
+    printf '%s' "{\"type\":\"findings-list\"}"
     printf '%s' "]"
 
 }
@@ -3950,9 +3949,10 @@ function buildInspectHelpGuidanceContentJSON() {
 function buildInspectNextStepsGuidanceContentJSON() {
 
     printf '%s' "["
-    printf '%s' "{\"content\":\"Mac Health Check Flow\",\"phases\":[\"Checks Complete\",\"Report Written\",\"Summary Available\",\"Cached Report Expires\"],\"currentPhase\":4,\"style\":\"stepper\",\"type\":\"phase-tracker\"},"
+    printf '%s' "{\"content\":\"Mac Health Check Flow\",\"phases\":[\"Checks Complete\",\"Report Written\",\"Summary Reviewed\",\"Cached Report Expires\"],\"currentPhase\":4,\"style\":\"stepper\",\"type\":\"phase-tracker\"},"
     printf '%s' "{\"content\":$( jsonString "$( getInspectNextStepsText )" ),\"type\":\"info\"},"
-    printf '%s' "$( buildInspectSummaryComparisonTableJSON )"
+    printf '%s' "{\"type\":\"compliance-summary\",\"label\":\"Overall Compliance Status\"},"
+    printf '%s' "{\"type\":\"findings-list\"}"
     printf '%s' "]"
 
 }
