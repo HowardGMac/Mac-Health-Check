@@ -17,7 +17,7 @@
 #
 # HISTORY
 #
-# Version 4.0.0b20, 28-Apr-2026, Dan K. Snelson (@dan-snelson)
+# Version 4.0.0b21, 28-Apr-2026, Dan K. Snelson (@dan-snelson)
 # - Added JSON health reporting (with optional Splunk HTTP Event Collector (HEC) delivery)
 # - Added a stand-alone swiftDialog Inspect Mode-flavored report (i.e., `inspectSummaryPreset="on"`), plus cached replay (i.e., `inspectReplayMaximumAgeSeconds`) for `Self Service` runs
 # - Refactored `checkElectronCornerMask` to reduce execution time
@@ -43,6 +43,7 @@
 # - Added plist-backed `compliance-summary`, `findings-list` and live-bound bento-grid sections to the Inspect Mode report
 # - Added Inspect Mode trigger, readiness, result and compliance plist control files for more reliable inspect workflows
 # - Refactored swiftDialog pre-flight updates to skip redundant production package downloads when the installed release already matches the latest production build
+# - Refactored Silent full health-check runs to generate Inspect Mode config assets without launching swiftDialog
 #
 ####################################################################################################
 
@@ -57,7 +58,7 @@
 export PATH=/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin/
 
 # Script Version
-scriptVersion="4.0.0b20"
+scriptVersion="4.0.0b21"
 
 # Client-side Log
 scriptLog="/var/log/org.churchofjesuschrist.log"
@@ -1150,6 +1151,16 @@ function jsonIsObject() {
 
 }
 
+function getDialogVersionDisplay() {
+
+    if [[ -x "${dialogBinary}" ]]; then
+        "${dialogBinary}" --version 2>/dev/null || echo "Not installed"
+    else
+        echo "Not installed"
+    fi
+
+}
+
 function mergeDialogAndListItems() {
 
     local dialogJSON="${1}"
@@ -1221,7 +1232,7 @@ case "${infobuttonaction}" in
         ;;
 esac
 
-helpmessage="For assistance, please contact: **${supportTeamName}**<br>${supportLines}<br>**User Information:**<br>- **Full Name:** ${loggedInUserFullname}<br>- **User Name:** ${loggedInUser}<br>- **User ID:** ${loggedInUserID}<br>- **Volume Owners:** ${volumeOwnerList}<br>- **Secure Token:** ${secureToken}<br>- **Location Services:** ${locationServicesStatus}<br>- **Microsoft OneDrive Sync Date:** ${oneDriveSyncDate}<br>- **Platform SSOe:** ${platformSSOeResult}<br><br>**Computer Information:**<br>- **macOS:** ${osVersion} (${osBuild})<br>- **Dialog:** $(dialog -v)<br>- **Script:** ${scriptVersion}<br>- **Computer Name:** ${computerName}<br>- **Serial Number:** ${serialNumber}<br>- **Wi-Fi:** ${ssid}<br>- ${activeIPAddress}<br>- **VPN IP:** ${vpnStatus}"
+helpmessage="For assistance, please contact: **${supportTeamName}**<br>${supportLines}<br>**User Information:**<br>- **Full Name:** ${loggedInUserFullname}<br>- **User Name:** ${loggedInUser}<br>- **User ID:** ${loggedInUserID}<br>- **Volume Owners:** ${volumeOwnerList}<br>- **Secure Token:** ${secureToken}<br>- **Location Services:** ${locationServicesStatus}<br>- **Microsoft OneDrive Sync Date:** ${oneDriveSyncDate}<br>- **Platform SSOe:** ${platformSSOeResult}<br><br>**Computer Information:**<br>- **macOS:** ${osVersion} (${osBuild})<br>- **Dialog:** $( getDialogVersionDisplay )<br>- **Script:** ${scriptVersion}<br>- **Computer Name:** ${computerName}<br>- **Serial Number:** ${serialNumber}<br>- **Wi-Fi:** ${ssid}<br>- ${activeIPAddress}<br>- **VPN IP:** ${vpnStatus}"
 
 case ${mdmVendor} in
 
@@ -3779,7 +3790,7 @@ function buildInspectComputerInformationItemsJSON() {
 
     local computerInformationItems=(
         "**macOS:** ${osVersion} (${osBuild})"
-        "**Dialog:** $(dialog -v)"
+        "**Dialog:** $( getDialogVersionDisplay )"
         "**Script:** ${scriptVersion}"
         "**Computer Name:** ${computerName}"
         "**Serial Number:** ${serialNumber}"
@@ -4150,6 +4161,19 @@ function prepareInspectConfigForUser() {
         return 1
     fi
 
+    if [[ -z "${loggedInUser}" ]] || ! id "${loggedInUser}" >/dev/null 2>&1; then
+        if [[ "${operationMode}" == "Silent" ]]; then
+            if ! chmod 644 "${inspectConfigToPrepare}" 2>/dev/null; then
+                warning "Inspect Summary: failed to set readable permissions on ${inspectConfigToPrepare} for Silent mode."
+                return 1
+            fi
+            notice "Inspect Summary: no valid GUI user found; leaving ${inspectConfigToPrepare} root-owned and readable for Silent mode."
+            return 0
+        fi
+        warning "Inspect Summary: no valid logged-in user available for ${inspectConfigToPrepare}."
+        return 1
+    fi
+
     if ! chown "${loggedInUser}" "${inspectConfigToPrepare}" 2>/dev/null; then
         warning "Inspect Summary: failed to set ownership on ${inspectConfigToPrepare} for ${loggedInUser}."
         return 1
@@ -4189,6 +4213,19 @@ function prepareInspectCompliancePlistForUser() {
 
     if [[ ! -e "${inspectCompliancePlistPath}" ]]; then
         warning "Inspect Summary: compliance plist is unavailable at ${inspectCompliancePlistPath}."
+        return 1
+    fi
+
+    if [[ -z "${loggedInUser}" ]] || ! id "${loggedInUser}" >/dev/null 2>&1; then
+        if [[ "${operationMode}" == "Silent" ]]; then
+            if ! chmod 644 "${inspectCompliancePlistPath}" 2>/dev/null; then
+                warning "Inspect Summary: failed to set readable permissions on ${inspectCompliancePlistPath} for Silent mode."
+                return 1
+            fi
+            notice "Inspect Summary: no valid GUI user found; leaving ${inspectCompliancePlistPath} root-owned and readable for Silent mode."
+            return 0
+        fi
+        warning "Inspect Summary: no valid logged-in user available for ${inspectCompliancePlistPath}."
         return 1
     fi
 
@@ -4611,12 +4648,23 @@ function quitScript() {
         fi
     fi
 
-    if [[ "${operationMode}" == "Self Service" ]] && inspectSummaryIsEnabled; then
-        if generateInspectSummaryAssets && launchInspectSummary; then
-            inspectSummaryLaunched="true"
-        else
-            info "Inspect Summary: continuing with the standard completion countdown."
-        fi
+    if inspectSummaryIsEnabled; then
+        case "${operationMode}" in
+            "Self Service" )
+                if generateInspectSummaryAssets && launchInspectSummary; then
+                    inspectSummaryLaunched="true"
+                else
+                    info "Inspect Summary: continuing with the standard completion countdown."
+                fi
+                ;;
+            "Silent" )
+                if generateInspectSummaryAssets; then
+                    notice "Inspect Summary: Silent mode wrote inspect config assets without launching swiftDialog."
+                else
+                    warning "Inspect Summary: Silent mode failed to write inspect config assets; continuing without UI."
+                fi
+                ;;
+        esac
     fi
 
     if [[ "${operationMode}" != "Silent" ]]; then

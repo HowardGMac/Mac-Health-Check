@@ -1,6 +1,6 @@
 # Mac Health Check: Script Execution Flow
 
-This flowchart documents the `4.0.0b19` decision logic executed each time Mac Health Check runs, from the initial invocation through pre-flight validation, health check execution, and final output.
+This flowchart documents the `4.0.0b21` decision logic executed each time Mac Health Check runs, from the initial invocation through pre-flight validation, health check execution, and final output.
 
 ```mermaid
 graph TB
@@ -56,7 +56,7 @@ graph TB
         CACHEDUPLOAD["Validate cached report again<br>wrap existing JSON in HEC payload<br>upload to Splunk and exit"]
         INSTALLCHECK{"Non-Silent or<br>Silent + Splunk production?"}
         INSTALLCACHE["Install or update client-side script<br>sanitize Jamf inventory code<br>validate and load LaunchDaemon"]
-        SDCHECK{"swiftDialog<br>≥ 3.1.0.4976?"}
+        SDCHECK{"swiftDialog<br>≥ 3.1.0.4977?"}
         SDINSTALL["Download & install<br>swiftDialog from GitHub"]
         KILLSD["Kill existing<br>Dialog instances"]
         REPLAYCHECK{"Self Service + inspectSummaryPreset=on<br>cached inspect config age<br>< inspectReplayMaximumAgeSeconds and valid?"}
@@ -231,10 +231,10 @@ Set via MDM policy parameter. Determines UI behavior and which checks execute. T
 The script must run as root. If not, it calls `fatal()` and exits immediately with a log entry.
 
 ### 3. jq Availability
-The script requires `jq` for JSON validation, formatting, and dialog/listitem JSON merging. If `jq` is unavailable, `4.0.0b19` exits during pre-flight with a fatal dependency message.
+The script requires `jq` for JSON validation, formatting, and dialog/listitem JSON merging. If `jq` is unavailable, `4.0.0b21` exits during pre-flight with a fatal dependency message.
 
 ### 4. swiftDialog Version
-The script requires swiftDialog ≥ 3.1.0.4976. If the installed version is older (or swiftDialog is absent), the script downloads and installs the latest release from GitHub before proceeding.
+The script requires swiftDialog ≥ 3.1.0.4977. If the installed version is older (or swiftDialog is absent), the script downloads and installs the latest release from GitHub before proceeding.
 
 ### 5. Dock Integration
 If `enableDockIntegration` is `true` and the mode is not `Silent`, the script resolves the Dock icon, attempts a named `Dialog.app` launch so Dock hover text matches the script name, initializes `dockiconbadge`, and falls back to the standard dialog binary if the Dock-enabled launch fails.
@@ -258,8 +258,8 @@ If `webhookURL` (Parameter 5) is populated and health issues are detected, `quit
 ### 10. JSON Report + Splunk Delivery
 At the end of the run, `generateAndSendSplunkReport()` writes the canonical local JSON report and, when `splunkOperationMode=production` plus Parameters 7 and 8 are configured, optionally delivers a Splunk HEC envelope. `splunkOperationMode=off` or `test` still generates the report but skips network transmission. The Client-Side Cache LaunchDaemon uses the local client copy with `Silent` + default `splunkOperationMode=test`, refreshing the report without storing HEC secrets on disk. The daemon does not use `RunAtLoad`; scheduled runs set `launchDaemonRun=true`, the client script uses that marker to apply deterministic hardware-derived jitter only for daemon-triggered runs, and daemon stdout/stderr route to `/dev/null` so MHC-prefixed log writes remain single entries.
 
-### 11. Self Service Inspect Summary
-In `Self Service`, the script uses finalized in-memory results to generate `/var/tmp/MacHealthCheck-Inspect-Config.json`, then tries to launch a detached, moveable swiftDialog Inspect Mode Preset 6 guided summary. That summary now separates recorded results into `Unhealthy` and `Healthy` sections and omits either section when that bucket is empty. On a normal run, the existing `completionTimer` countdown remains on the main dialog whether the detached summary launches or not. Set `inspectSummaryPreset="off"` to skip both the handoff generation and detached launch.
+### 11. Inspect Summary Assets
+In `Self Service` and full `Silent` health-check runs, the script uses finalized in-memory results to generate `/var/tmp/MacHealthCheck-Inspect-Config.json` and `/var/tmp/MacHealthCheck-Inspect-Compliance.plist`. `Self Service` then tries to launch a detached, moveable swiftDialog Inspect Mode Preset 6 guided summary; `Silent` writes the assets without launching swiftDialog. That summary now separates recorded results into `Unhealthy` and `Healthy` sections and omits either section when that bucket is empty. On a normal `Self Service` run, the existing `completionTimer` countdown remains on the main dialog whether the detached summary launches or not. Set `inspectSummaryPreset="off"` to skip asset generation, detached launch and cached replay.
 
 ### 12. Self Service Cached Replay
 If `/var/tmp/MacHealthCheck-Inspect-Config.json` is younger than `inspectReplayMaximumAgeSeconds` and the cached inspect JSON still validates, a rerun in `Self Service` skips the health-check loop, launches the cached moveable Preset 6 guided summary after pre-flight/client-side installation, and exits without showing the main dialog countdown. Setting `inspectSummaryPreset="off"` disables this replay path.

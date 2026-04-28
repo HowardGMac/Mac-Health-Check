@@ -1,6 +1,6 @@
 # Mac Health Check: System Architecture
 
-This diagram shows the `4.0.0b19` Mac Health Check ecosystem, from administrator customization through MDM deployment, client-side execution, user interaction, and results output.
+This diagram shows the `4.0.0b21` Mac Health Check ecosystem, from administrator customization through MDM deployment, client-side execution, user interaction, and results output.
 
 ```mermaid
 graph TB
@@ -42,7 +42,7 @@ graph TB
 
     subgraph Client["💻 Client Mac"]
         TRIGGER["Policy Trigger<br>User via Self Service<br>or scheduled run"]
-        PREFLIGHT["Pre-flight Checks<br>• Running as root?<br>• jq available?<br>• swiftDialog ≥ 3.1.0.4976 installed?<br>• Kill existing Dialog instances"]
+        PREFLIGHT["Pre-flight Checks<br>• Running as root?<br>• jq available?<br>• swiftDialog ≥ 3.1.0.4977 installed?<br>• Kill existing Dialog instances"]
         MDMDETECT["MDM Vendor Detection<br>Auto-detect from installed profiles:<br>Jamf Pro / Kandji / Intune / Mosyle<br>JumpCloud / Addigy / Filewave / Fleet"]
         CHECKLIST["Check Set Selection<br>Vendor-specific list<br>(28–39 checks)"]
 
@@ -81,7 +81,7 @@ graph TB
     subgraph Output["📤 Output"]
         LOG["Client Log<br>/var/log/org.churchofjesuschrist.log<br>Structured entries with prefixes:<br>PRE-FLIGHT · NOTICE · INFO<br>WARNING · ERROR · FATAL ERROR"]
         REPORT["Local JSON Report<br>/var/tmp/MacHealthCheck-Report.json<br>Canonical root-only artifact"]
-        INSPECTFILES["Inspect Handoff File<br>/var/tmp/MacHealthCheck-Inspect-Config.json<br>Readable by the logged-in user"]
+        INSPECTFILES["Inspect Handoff Files<br>/var/tmp/MacHealthCheck-Inspect-Config.json<br>/var/tmp/MacHealthCheck-Inspect-Compliance.plist<br>Readable by user or root-owned in Silent"]
         WEBHOOK["Webhook Notification<br>Microsoft Teams or Slack<br>(optional — param 5)"]
         INVENTORY["MDM Inventory Update<br>Via updateComputerInventory()<br>(Jamf Pro full runs only)"]
 
@@ -143,7 +143,7 @@ Mac Health Check is MDM-agnostic and has been tested with eight MDM platforms. T
 The script validates its environment before running any health checks:
 1. Confirms execution as root
 2. Verifies `jq` is available for JSON validation and formatting; exits during pre-flight if it is missing
-3. Checks for swiftDialog ≥ 3.1.0.4976 (installs from GitHub if missing)
+3. Checks for swiftDialog ≥ 3.1.0.4977 (installs from GitHub if missing)
 4. Kills any existing swiftDialog instances
 
 **MDM Vendor Detection**
@@ -153,7 +153,7 @@ The script inspects installed configuration profiles to identify the MDM vendor,
 
 ### Runtime Execution
 
-Health checks execute sequentially, with each result posted to the swiftDialog dialog via a named pipe (`dialogUpdate`) and captured into a structured per-check result collector for final reporting. When Dock integration is enabled, non-`Silent` runs also show a Dock icon with a decreasing badge count. After all checks complete, the main dialog updates to its final healthy / needs attention / unhealthy state and `4.0.0b19` writes a final JSON health report before cleanup. In `Self Service`, a normal run also launches a detached, moveable Inspect Mode Preset 6 guided summary with separate `Unhealthy` and `Healthy` sections while the main dialog retains its standard countdown, and reruns can replay that cached summary without re-running checks when `inspectSummaryPreset="on"` and the handoff file is still younger than `inspectReplayMaximumAgeSeconds`. Client-Side Cache adds a client-side script and LaunchDaemon that refresh `/var/tmp/MacHealthCheck-Report.json` nightly, letting Jamf Pro upload a fresh cached report without repeating the checks when versions match.
+Health checks execute sequentially, with each result posted to the swiftDialog dialog via a named pipe (`dialogUpdate`) in non-`Silent` modes and captured into a structured per-check result collector for final reporting. When Dock integration is enabled, non-`Silent` runs also show a Dock icon with a decreasing badge count. After all checks complete, the main dialog updates to its final healthy / needs attention / unhealthy state and `4.0.0b21` writes a final JSON health report before cleanup. `Self Service` and full `Silent` health-check runs generate Inspect Mode config assets from the finalized in-memory results. In `Self Service`, a normal run also launches a detached, moveable Inspect Mode Preset 6 guided summary with separate `Unhealthy` and `Healthy` sections while the main dialog retains its standard countdown, and reruns can replay that cached summary without re-running checks when `inspectSummaryPreset="on"` and the handoff file is still younger than `inspectReplayMaximumAgeSeconds`. Client-Side Cache adds a client-side script and LaunchDaemon that refresh `/var/tmp/MacHealthCheck-Report.json` nightly, letting Jamf Pro upload a fresh cached report without repeating the checks when versions match.
 
 ---
 
@@ -165,7 +165,7 @@ Health checks execute sequentially, with each result posted to the swiftDialog d
 
 **Client-Side Cache** — Non-`Silent` and full Jamf production runs install `/Library/Management/org.churchofjesuschrist/MHC.zsh` plus `/Library/LaunchDaemons/org.churchofjesuschrist.MHC.plist`. The script validates the generated plist, loads it as a root LaunchDaemon without `RunAtLoad`, routes daemon stdout/stderr to `/dev/null`, and sets `launchDaemonRun=true` for scheduled executions. The LaunchDaemon starts at 00:53; the client-side copy applies deterministic hardware-derived jitter so runs land in the 00:53-01:53 window centered on 1:23 a.m. It runs in `Silent` mode with `splunkOperationMode=test`, refreshing the JSON report without storing Splunk secrets locally. If no GUI user is active during a LaunchDaemon refresh, user-scoped checks fall back to loginwindow `lastUserName`.
 
-**Inspect Summary** — `Self Service` runs also generate a readable handoff file at `/var/tmp/MacHealthCheck-Inspect-Config.json`, which the detached, moveable Inspect Mode Preset 6 guided summary reads during the retained main-dialog countdown and can replay on rerun when `inspectSummaryPreset="on"` plus the cached handoff file remains younger than `inspectReplayMaximumAgeSeconds`. The summary now separates recorded results into `Unhealthy` and `Healthy` sections and omits either section when no checks were recorded in that bucket. Set the toggle to `off` to disable both behaviors entirely.
+**Inspect Summary** — `Self Service` and full `Silent` health-check runs generate readable handoff files at `/var/tmp/MacHealthCheck-Inspect-Config.json` and `/var/tmp/MacHealthCheck-Inspect-Compliance.plist`. `Self Service` launches the detached, moveable Inspect Mode Preset 6 guided summary during the retained main-dialog countdown and can replay on rerun when `inspectSummaryPreset="on"` plus the cached handoff file remains younger than `inspectReplayMaximumAgeSeconds`. `Silent` writes the assets without launching swiftDialog. The summary now separates recorded results into `Unhealthy` and `Healthy` sections and omits either section when no checks were recorded in that bucket. Set the toggle to `off` to disable asset generation, launch and replay.
 
 **Webhook** — When configured, a summary of warning, failed, or errored checks is posted to Microsoft Teams or Slack at the end of each run with health issues. Jamf Pro deployments include a direct link to the computer record.
 

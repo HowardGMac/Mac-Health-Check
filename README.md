@@ -1,6 +1,6 @@
 ![GitHub release (latest by date)](https://img.shields.io/github/v/release/dan-snelson/Mac-Health-Check?display_name=tag) ![GitHub pre-release (latest by date)](https://img.shields.io/github/v/release/dan-snelson/Mac-Health-Check?display_name=tag&include_prereleases) ![GitHub issues](https://img.shields.io/github/issues-raw/dan-snelson/Mac-Health-Check) ![GitHub closed issues](https://img.shields.io/github/issues-closed-raw/dan-snelson/Mac-Health-Check) ![GitHub pull requests](https://img.shields.io/github/issues-pr-raw/dan-snelson/Mac-Health-Check) ![GitHub closed pull requests](https://img.shields.io/github/issues-pr-closed-raw/dan-snelson/Mac-Health-Check) [![swiftDialog](https://img.shields.io/badge/swiftDialog-Enabled-blue)](https://swiftdialog.app) [![Semgrep Security Scan](https://img.shields.io/badge/security%20scanned%20by-Semgrep-00C7B7?style=flat&logo=semgrep&logoColor=white)](https://semgrep.dev)
 
-# Mac Health Check (4.0.0b20)
+# Mac Health Check (4.0.0b21)
 
 > A **major** update to the practical, MDM-agnostic, user-friendly approach to surfacing Mac compliance information directly to end-users — and now **enterprise reporting data warehouses** — via your MDM's self-service app
 
@@ -16,11 +16,11 @@ Deployment of Mac Health Check involves configuring organizational defaults, emb
 
 Administrators can customize the user interface using swiftDialog’s visual capabilities, making the experience both informative and approachable.
 
-The tool logs results for review, writes a structured JSON health report locally, can optionally forward that report to Splunk HEC, and continues to avoid altering device configuration. In `Self Service`, `4.0.0b20` launches a detached swiftDialog Inspect Mode `preset6` guided summary built from finalized in-memory results plus a live compliance plist for swiftDialog `3.1.0.4977` compliance findings. The summary includes `compliance-summary`, `findings-list`, live-bound bento-grid sections and the existing `Unhealthy` / `Healthy` details, while retaining the main dialog's 60-second completion countdown. Reruns within 15 minutes can replay that cached summary without re-running health checks, and runs with health issues now rely on the final main-dialog state plus that detached inspect summary instead of a separate pseudo-alert notification. `Silent` remains well-suited for background IT visibility without end-user intrusion.
+The tool logs results for review, writes a structured JSON health report locally, can optionally forward that report to Splunk HEC, and continues to avoid altering device configuration. In `Self Service`, `4.0.0b21` launches a detached swiftDialog Inspect Mode `preset6` guided summary built from finalized in-memory results plus a live compliance plist for swiftDialog `3.1.0.4977` compliance findings. The summary includes `compliance-summary`, `findings-list`, live-bound bento-grid sections and the existing `Unhealthy` / `Healthy` details, while retaining the main dialog's 60-second completion countdown. Full `Silent` health-check runs now generate the same Inspect Mode config and compliance plist artifacts without launching swiftDialog. Reruns within 15 minutes can replay that cached summary without re-running health checks, and runs with health issues now rely on the final main-dialog state plus that detached inspect summary instead of a separate pseudo-alert notification.
 
-`inspectSummaryPreset` is now an `on` / `off` toggle: `on` launches the fixed Preset 6 inspect summary and enables cached replay, while `off` disables both behaviors entirely.
+`inspectSummaryPreset` is now an `on` / `off` toggle: `on` generates the Preset 6 inspect-summary assets, launches the summary in `Self Service`, and enables cached replay; `off` disables asset generation, launch, and replay.
 
-The current `4.0.0b20` beta expects swiftDialog `3.1.0.4977` or newer so `Self Service` can launch the detached inspect summary with compliance findings.
+The current `4.0.0b21` beta expects swiftDialog `3.1.0.4977` or newer so `Self Service` can launch the detached inspect summary with compliance findings.
 
 <a href="https://www.youtube.com/watch?v=rDPoYlSSEtQ&t=36s" target="_blank"><img src="images/Mac_Health_Check Presentation.png" alt="Rocketman Tech December 2025 Meetup" width="600"/><br />Rocketman Tech December 2025 Meetup</a> (05-Dec-2025)
 
@@ -37,7 +37,7 @@ Mac Health Check is particularly valuable in IT support workflows, serving as an
 - Parameters 9 and 10 set the HEC `index` and `sourcetype`; Parameter 11 enables reporting debug output
 - `splunkOperationMode=off` disables HEC delivery explicitly while still preserving local JSON report generation
 - `splunkOperationMode=test` preserves local report generation while intentionally skipping network transmission
-- In `4.0.0b20`, non-`Silent` runs and full Jamf production runs install a client-side copy at `/Library/Management/org.churchofjesuschrist/MHC.zsh` plus a `org.churchofjesuschrist.MHC` LaunchDaemon that refreshes the local report across a deterministic 00:53-01:53 window centered on 1:23 a.m.
+- In `4.0.0b21`, non-`Silent` runs and full Jamf production runs install a client-side copy at `/Library/Management/org.churchofjesuschrist/MHC.zsh` plus a `org.churchofjesuschrist.MHC` LaunchDaemon that refreshes the local report across a deterministic 00:53-01:53 window centered on 1:23 a.m.
 - The LaunchDaemon sets `launchDaemonRun=true`; the client-side script then derives a stable per-Mac jitter from hardware UUID, logs the jitter through MHC-prefixed logging, and routes daemon stdout/stderr to `/dev/null` to avoid duplicate client-log lines.
 - When a LaunchDaemon-triggered refresh runs with no active GUI user, Mac Health Check falls back to `/Library/Preferences/com.apple.loginwindow.plist` `lastUserName` for user-scoped checks.
 - Jamf Pro `Silent` + `splunkOperationMode=production` runs upload the cached report without re-running checks when the client-side script version matches and `/var/tmp/MacHealthCheck-Report.json` is valid and less than 36 hours old
@@ -58,22 +58,22 @@ Terminal summary of most recent health issues:
 
 ```zsh
 jq -r '
-    # Extract result date from Overview
-    (.items[]
-    | select(.id == "overview")
-    | .guidanceContent[]
-    | select(.content | startswith("Results as of"))
-    | .content),
+    # Print overview text blocks (adapted from metadata + summary)
+    "Mac Health Check Report",
+    "Hostname: \(.metadata.hostname) (\(.metadata.localHostName))",
+    "Timestamp: \(.metadata.timestamp)",
+    "Overall Status: \(.summary.overallStatus)",
+    "Healthy: \(.summary.healthyCount) | Warning: \(.summary.warningCount) | Fail: \(.summary.failCount)",
+    "",
 
-    # Then print unhealthy summary + bullets
-    (.items[]
-    | select(.id == "unhealthy")
-    | .guidanceContent[]
-    | if .actual == null
-    then .content
-    else "• \(.content): \(.actual)"
+    # Then print unhealthy/warning summary + bullets
+    (.checks[]
+    | select(.status != "healthy")
+    | if (.rawValue? | type) != "string" or .rawValue == ""
+    then .message
+    else "• \(.name): \(.rawValue)"
     end)
-    ' /var/tmp/MacHealthCheck-Inspect-Config.json
+    ' /var/tmp/MacHealthCheck-Report.json
 ```
 
 ### Step Zero for Tier 1
@@ -95,6 +95,7 @@ jq -r '
 - No dialog is presented to the end-user
 - Ideal for background compliance reporting
 - Complements existing MDM compliance frameworks
+- Full `Silent` health-check runs generate `/var/tmp/MacHealthCheck-Inspect-Config.json` and `/var/tmp/MacHealthCheck-Inspect-Compliance.plist` without launching swiftDialog
 - When combined with `splunkOperationMode=production`, suppresses non-Splunk stdout/stderr noise in Jamf policy logs while continuing to write the full run to `${scriptLog}`
 - In that same `Silent` + `splunkOperationMode=production` combination, `updateComputerInventory()` logs a skip message and does not run `jamf recon`
 - Client-Side Cache uses a local LaunchDaemon copy to refresh `/var/tmp/MacHealthCheck-Report.json` nightly without storing Splunk HEC secrets client-side
@@ -136,9 +137,9 @@ organizationDirectory="/Library/Management/org.churchofjesuschrist"
 - If dock icon setup fails, Mac Health Check logs a warning and falls back to the default `/usr/local/bin/dialog` launch path
 
 ## Features
-The following health checks and information reporting are included in version `4.0.0b20`, which operates in `Self Service` mode by default. (Change `operationMode` to `Debug`, `Development` or `Test` when getting ready to deploy in production.)
+The following health checks and information reporting are included in version `4.0.0b21`, which operates in `Self Service` mode by default. (Change `operationMode` to `Debug`, `Development` or `Test` when getting ready to deploy in production.)
 
-> :new: Mac Health Check version `4.0.0b20` retains secure JSON report generation and optional Splunk HEC delivery, adds Client-Side Cache nightly report caching for Jamf Pro Splunk uploads, updates the detached `Self Service` Inspect Mode summary for swiftDialog `3.1.0.4977` compliance findings, and supports 15-minute cached summary replay on rerun.
+> :new: Mac Health Check version `4.0.0b21` retains secure JSON report generation and optional Splunk HEC delivery, adds Client-Side Cache nightly report caching for Jamf Pro Splunk uploads, updates Inspect Mode summary assets for swiftDialog `3.1.0.4977` compliance findings, writes those assets during full `Silent` health-check runs without launching UI, and supports 15-minute cached summary replay on rerun.
 
 
 
@@ -212,14 +213,15 @@ The following health checks and information reporting are included in version `4
 - Requires `jq` for JSON validation and formatting, with local report generation and Splunk payload assembly stopping at pre-flight if `jq` is unavailable
 - Includes copy/paste Splunk SPL, Simple XML, and Dashboard Studio starter examples in [Resources/Splunk-Dashboard-Reference.md](Resources/Splunk-Dashboard-Reference.md)
 
-#### :new: Self Service Inspect Mode Summary
-- `Self Service` runs now generate `/var/tmp/MacHealthCheck-Inspect-Config.json` directly from finalized in-memory results
-- `Self Service` runs also generate `/var/tmp/MacHealthCheck-Inspect-Compliance.plist`, which feeds `plistSources`, `compliance-summary`, `findings-list` and live-bound bento-grid popovers
+#### :new: Inspect Mode Summary
+- `Self Service` and full `Silent` health-check runs now generate `/var/tmp/MacHealthCheck-Inspect-Config.json` directly from finalized in-memory results
+- `Self Service` and full `Silent` health-check runs also generate `/var/tmp/MacHealthCheck-Inspect-Compliance.plist`, which feeds `plistSources`, `compliance-summary`, `findings-list` and live-bound bento-grid popovers
 - The generated config includes `/var/tmp/MacHealthCheck-Inspect.trigger`, `/var/tmp/MacHealthCheck-Inspect.ready` and `/var/tmp/MacHealthCheck-Inspect-Result.json` control paths for Inspect Mode workflows
 - Normal `Self Service` runs launch the detached swiftDialog Inspect Mode `preset6` guided summary after report generation while retaining the existing 60-second main-dialog countdown
+- `Silent` runs never launch swiftDialog; they only write Inspect Mode config assets for later review
 - The detached summary now separates recorded results into `Unhealthy` and `Healthy` sections and omits either section when no checks exist in that bucket
 - Re-running `zsh Mac-Health-Check.zsh` within `inspectReplayMaximumAgeSeconds` (i.e., 15 minutes), replays the cached inspect summary immediately and skips the health checks plus the main dialog countdown
-- `inspectSummaryPreset="on"` enables the fixed Preset 6 summary; set it to `off` to completely disable inspect-summary generation plus cached replay
+- `inspectSummaryPreset="on"` enables Preset 6 asset generation, `Self Service` launch and cached replay; set it to `off` to disable all three
 - Unhealthy `Self Service` runs now rely on the final unhealthy main-dialog state plus the detached inspect summary after report generation, without a separate pseudo-alert notification
 - If inspect-summary asset generation or launch fails, Mac Health Check falls back to the existing `completionTimer` countdown path
 - Requires swiftDialog `3.1.0.4977` or newer
@@ -264,7 +266,7 @@ The following health checks and information reporting are included in version `4
 ### Policy Log Reporting
 
 ```
-MHC (4.0.0b20): 2026-04-28 03:43:13 - [NOTICE] WARNING: 'localadmin' IS A MEMBER OF 'admin';
+MHC (4.0.0b21): 2026-04-28 03:43:13 - [NOTICE] WARNING: 'localadmin' IS A MEMBER OF 'admin';
 User: macOS Server Administrator (localadmin) [503] staff everyone localaccounts _appserverusr 
 admin _appserveradm com.apple.sharepoint.group.4 com.apple.sharepoint.group.3
 com.apple.sharepoint.group.1 _appstore _lpadmin _lpoperator _developer _analyticsusers
@@ -318,7 +320,7 @@ Deployment of Mac Health Check involves configuring organizational defaults, upl
 
 A new "Development" Operation Mode has been added to aid in developing Health Checks, allowing the easy execution of a _single_ Health Check.
 
-When `operationMode` is set to `Development`, the current `4.0.0b20` implementation uses a dedicated `developmentListitemJSON` for a single `Microsoft Teams` check instead of running the entire suite.
+When `operationMode` is set to `Development`, the current `4.0.0b21` implementation uses a dedicated `developmentListitemJSON` for a single `Microsoft Teams` check instead of running the entire suite.
 
 ```zsh
 ####################################################################################################

@@ -2,9 +2,10 @@
 
 ## CHANGELOG
 
-### 4.0.0b20 (28-Apr-2026)
+### 4.0.0b21 (28-Apr-2026)
 - Added JSON health reporting (with optional Splunk HTTP Event Collector (HEC) delivery)
 - Added a stand-alone swiftDialog Inspect Mode-flavored report (i.e., `inspectSummaryPreset="on"`), plus cached replay (i.e., `inspectReplayMaximumAgeSeconds`) for `Self Service` runs
+- Refactored full `Silent` health-check runs to write `/var/tmp/MacHealthCheck-Inspect-Config.json` and `/var/tmp/MacHealthCheck-Inspect-Compliance.plist` without launching swiftDialog
 - Refactored `checkElectronCornerMask` to reduce execution time
 - Many quality-of-life user-interface improvements
 - Raised the minimum required swiftDialog version to `3.1.0.4976`

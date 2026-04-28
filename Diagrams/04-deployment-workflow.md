@@ -1,6 +1,6 @@
 # Mac Health Check: Deployment Workflow
 
-This diagram provides a step-by-step guide for deploying the `4.0.0b19` release of Mac Health Check through an MDM solution. Follow the phases in order for a successful deployment.
+This diagram provides a step-by-step guide for deploying the `4.0.0b21` release of Mac Health Check through an MDM solution. Follow the phases in order for a successful deployment.
 
 ```mermaid
 graph TB
@@ -94,7 +94,7 @@ graph TB
         P6A["Create Jamf upload policy<br>Parameter 4 = 'Silent'<br>Parameter 6 = 'production'"]
         P6B["Client LaunchDaemon refreshes<br>local report in a deterministic 00:53-01:53 window centered on 1:23 a.m.<br>No RunAtLoad"]
         P6C["Assign scope &amp; publish"]
-        P6SKIP2["Skip — Self Service only"]
+        P6SKIP2["Skip recurring silent reporting"]
 
         P5D --> P6Q
         P6Q -->|Yes| P6A
