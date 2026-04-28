@@ -42,6 +42,7 @@
 # - Updated the detached swiftDialog Inspect Mode Preset 6 report for swiftDialog `3.1.0.4977` compliance findings
 # - Added plist-backed `compliance-summary`, `findings-list` and live-bound bento-grid sections to the Inspect Mode report
 # - Added Inspect Mode trigger, readiness, result and compliance plist control files for more reliable inspect workflows
+# - Refactored swiftDialog pre-flight updates to skip redundant production package downloads when the installed release already matches the latest production build
 #
 ####################################################################################################
 
@@ -4746,7 +4747,13 @@ fi
 # Pre-flight Check: Logging Preamble
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-preFlight "\n\n###\n# $humanReadableScriptName (${scriptVersion})\n# https://snelson.us/mhc\n#\n# Operation Mode: ${operationMode}\n####\n\n"
+preFlight "###"
+preFlight "# ${humanReadableScriptName} (${scriptVersion})"
+preFlight "# https://snelson.us/mhc"
+preFlight "#"
+preFlight "# Operation Mode: ${operationMode}"
+preFlight "###"
+preFlight ""
 preFlight "Initiating …"
 
 
@@ -4806,11 +4813,41 @@ fi
 # Pre-flight Check: Validate / install swiftDialog (Thanks big bunches, @acodega!)
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-function dialogInstall() {
-    # Get the URL of the latest PKG From the Dialog GitHub repo
-    dialogURL=$(curl -L --silent --fail --connect-timeout 10 --max-time 30 \
+function getLatestSwiftDialogPkgURL() {
+
+    curl -L --silent --fail --connect-timeout 10 --max-time 30 \
         "https://api.github.com/repos/swiftDialog/swiftDialog/releases/latest" \
-        | awk -F '"' "/browser_download_url/ && /pkg\"/ { print \$4; exit }")
+        | awk -F '"' '/browser_download_url/ && /pkg"/ { print $4; exit }'
+
+}
+
+function getSwiftDialogVersionFromPkgURL() {
+
+    local dialogPackageURL="${1}"
+    local dialogPackageName="${dialogPackageURL##*/}"
+    local dialogPackageVersion="${dialogPackageName#dialog-}"
+
+    dialogPackageVersion="${dialogPackageVersion%.pkg}"
+    dialogPackageVersion="${dialogPackageVersion//-/.}"
+
+    printf '%s' "${dialogPackageVersion}"
+
+}
+
+function dialogInstall() {
+
+    local dialogURL="${1:-}"
+    local dialogPackageVersion=""
+    local expectedDialogTeamID="PWA5E9TQ59"
+    local workDirectory=""
+    local tempDirectory=""
+    local teamID=""
+
+    if [[ -z "${dialogURL}" ]]; then
+        dialogURL="$( getLatestSwiftDialogPkgURL )"
+    fi
+
+    dialogPackageVersion="$( getSwiftDialogVersionFromPkgURL "${dialogURL}" )"
     
     # Validate URL was retrieved
     if [[ -z "${dialogURL}" ]]; then
@@ -4822,10 +4859,11 @@ function dialogInstall() {
         fatal "Invalid swiftDialog URL format: ${dialogURL}"
     fi
 
-    # Expected Team ID of the downloaded PKG
-    expectedDialogTeamID="PWA5E9TQ59"
-
-    preFlight "Installing swiftDialog from ${dialogURL}..."
+    if [[ -n "${dialogPackageVersion}" ]]; then
+        preFlight "Installing swiftDialog ${dialogPackageVersion} from ${dialogURL}..."
+    else
+        preFlight "Installing swiftDialog from ${dialogURL}..."
+    fi
 
     # Create temporary working directory
     workDirectory=$( basename "$0" )
@@ -4866,6 +4904,9 @@ function dialogInstall() {
 
 function dialogCheck() {
 
+    local latestProductionDialogURL=""
+    local latestProductionDialogVersion=""
+
     # Check for Dialog and install if not found
     if [[ ! -d "${dialogAppBundle}" ]]; then
 
@@ -4879,9 +4920,22 @@ function dialogCheck() {
 
         dialogVersion=$("${dialogBinary}" --version)
         if ! is-at-least "${swiftDialogMinimumRequiredVersion}" "${dialogVersion}"; then
+
+            latestProductionDialogURL="$( getLatestSwiftDialogPkgURL )"
+            latestProductionDialogVersion="$( getSwiftDialogVersionFromPkgURL "${latestProductionDialogURL}" )"
+
+            if [[ -n "${latestProductionDialogVersion}" ]] && is-at-least "${latestProductionDialogVersion}" "${dialogVersion}"; then
+                preFlight "swiftDialog version ${dialogVersion} found. Latest production release is ${latestProductionDialogVersion}; skipping automatic download because configured minimum ${swiftDialogMinimumRequiredVersion} targets a newer non-production build."
+                return 0
+            fi
             
-            preFlight "swiftDialog version ${dialogVersion} found but swiftDialog ${swiftDialogMinimumRequiredVersion} or newer is required; updating …"
-            dialogInstall
+            if [[ -n "${latestProductionDialogVersion}" ]]; then
+                preFlight "swiftDialog version ${dialogVersion} found but swiftDialog ${swiftDialogMinimumRequiredVersion} or newer is required; updating to latest production ${latestProductionDialogVersion} …"
+            else
+                preFlight "swiftDialog version ${dialogVersion} found but swiftDialog ${swiftDialogMinimumRequiredVersion} or newer is required; updating …"
+            fi
+
+            dialogInstall "${latestProductionDialogURL}"
             if [[ ! -x "${dialogBinary}" ]]; then
                 fatal "Unable to update swiftDialog; are downloads from GitHub blocked on this Mac?"
             fi

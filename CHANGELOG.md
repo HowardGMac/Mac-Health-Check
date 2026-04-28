@@ -33,6 +33,7 @@
 - Added Inspect Mode trigger, readiness and result control file paths to generated Preset 6 configs
 - Updated the Preset 6 demo resources to use source-level labels and cell IDs that bind directly to plist keys
 - Raised the minimum required swiftDialog version to `3.1.0.4977`
+- Refactored swiftDialog pre-flight updates to skip redundant production package downloads when the installed release already matches the latest production build
 
 ### 3.0.0 (23-Feb-2026)
 **First (attempt at a) MDM-agnostic release**
