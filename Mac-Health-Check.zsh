@@ -17,7 +17,7 @@
 #
 # HISTORY
 #
-# Version 4.0.0b19, 27-Apr-2026, Dan K. Snelson (@dan-snelson)
+# Version 4.0.0b20, 28-Apr-2026, Dan K. Snelson (@dan-snelson)
 # - Added JSON health reporting (with optional Splunk HTTP Event Collector (HEC) delivery)
 # - Added a stand-alone swiftDialog Inspect Mode-flavored report (i.e., `inspectSummaryPreset="on"`), plus cached replay (i.e., `inspectReplayMaximumAgeSeconds`) for `Self Service` runs
 # - Refactored `checkElectronCornerMask` to reduce execution time
@@ -39,6 +39,9 @@
 # - Fixed truncated command-preview log entries from user-context helpers by joining command arguments before logging
 # - Normalized client-side cache, LaunchDaemon, and Jamf external-check helper output so field logs stay MHC-prefixed
 # - Tightened cached-report validation and reporting state for cached Splunk uploads
+# - Updated the detached swiftDialog Inspect Mode Preset 6 report for swiftDialog `3.1.0.4977` compliance findings
+# - Added plist-backed `compliance-summary`, `findings-list` and live-bound bento-grid sections to the Inspect Mode report
+# - Added Inspect Mode trigger, readiness, result and compliance plist control files for more reliable inspect workflows
 #
 ####################################################################################################
 
@@ -53,7 +56,7 @@
 export PATH=/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin/
 
 # Script Version
-scriptVersion="4.0.0b19"
+scriptVersion="4.0.0b20"
 
 # Client-side Log
 scriptLog="/var/log/org.churchofjesuschrist.log"
@@ -62,7 +65,7 @@ scriptLog="/var/log/org.churchofjesuschrist.log"
 autoload -Uz is-at-least
 
 # Minimum Required Version of swiftDialog
-swiftDialogMinimumRequiredVersion="3.1.0.4976"
+swiftDialogMinimumRequiredVersion="3.1.0.4977"
 
 # Force locale to English (so `date` does not error on localization formatting)
 LANG="en_us_88591"
@@ -394,6 +397,10 @@ completionTimer="60"
 # Toggle detached inspect summary generation and cached replay [ on | off ]
 inspectSummaryPreset="on"
 inspectConfigPath="/var/tmp/MacHealthCheck-Inspect-Config.json"
+inspectCompliancePlistPath="/var/tmp/MacHealthCheck-Inspect-Compliance.plist"
+inspectTriggerFilePath="/var/tmp/MacHealthCheck-Inspect.trigger"
+inspectReadinessFilePath="/var/tmp/MacHealthCheck-Inspect.ready"
+inspectResultFilePath="/var/tmp/MacHealthCheck-Inspect-Result.json"
 inspectLaunchLogPath="/var/tmp/MacHealthCheck-Inspect-Summary.log"
 inspectReplayMaximumAgeSeconds="900" # 15 minutes
 
@@ -3445,6 +3452,203 @@ function getInspectCheckSymbolByIndex() {
 
 }
 
+function getInspectComplianceStatusByIndex() {
+
+    local index="${1}"
+
+    if [[ "${checkNormalizedStatusByIndex[${index}]}" == "healthy" ]]; then
+        echo "healthy"
+    else
+        echo "attention"
+    fi
+
+}
+
+function getInspectComplianceCategoryByIndex() {
+
+    local index="${1}"
+    local title="${checkTitleByIndex[${index}]:l}"
+
+    case "${title}" in
+        *system*integrity*protection*|*signed*system*volume*|*firewall*|*filevault*|*gatekeeper*|*xprotect*|*touch*id*|*password*hint*|*airdrop*|*airplay*receiver*|*bluetooth*sharing* )
+            echo "Security"
+            ;;
+        *push*notification*hosts*|*device*management*|*software*and*carrier*updates*|*certificate*validation*|*identity*and*content*services*|*network*quality*|*wi-fi*|*vpn* )
+            echo "Connectivity"
+            ;;
+        *mdm*|*check-in*|*inventory*|*push*notification*service* )
+            echo "MDM"
+            ;;
+        *teams*|*homebrew*|*electron* )
+            echo "Applications"
+            ;;
+        * )
+            echo "Maintenance"
+            ;;
+    esac
+
+}
+
+function getInspectComplianceCriticalityByIndex() {
+
+    local index="${1}"
+    local title="${checkTitleByIndex[${index}]:l}"
+
+    case "${title}" in
+        *system*integrity*protection*|*signed*system*volume*|*filevault*|*gatekeeper*|*xprotect*|*available*update*|*mdm*profile*|*mdm*certificate*|*check-in*|*inventory*|*device*management* )
+            echo "high"
+            ;;
+        *desktop*|*downloads*|*trash*|*airdrop*|*airplay*receiver*|*bluetooth*sharing*|*teams* )
+            echo "low"
+            ;;
+        * )
+            echo "medium"
+            ;;
+    esac
+
+}
+
+function buildInspectCompliancePlistEntryByIndex() {
+
+    local index="${1}"
+    local key="${checkKeyByIndex[${index}]}"
+    local title="${checkTitleByIndex[${index}]}"
+    local complianceStatus="$( getInspectComplianceStatusByIndex "${index}" )"
+    local expected="$( getInspectExpectedComparisonTextByIndex "${index}" )"
+    local actual="$( getInspectPreferredResultTextByIndex "${index}" )"
+    local category="$( getInspectComplianceCategoryByIndex "${index}" )"
+    local criticality="$( getInspectComplianceCriticalityByIndex "${index}" )"
+    local message="${checkMessageByIndex[${index}]:-${actual}}"
+
+    printf '\t<key>%s</key>\n' "$( xmlEscape "${key}" )"
+    printf '\t<dict>\n'
+    printf '\t\t<key>status</key>\n\t\t<string>%s</string>\n' "$( xmlEscape "${complianceStatus}" )"
+    printf '\t\t<key>category</key>\n\t\t<string>%s</string>\n' "$( xmlEscape "${category}" )"
+    printf '\t\t<key>displayName</key>\n\t\t<string>%s</string>\n' "$( xmlEscape "${title}" )"
+    printf '\t\t<key>expected</key>\n\t\t<string>%s</string>\n' "$( xmlEscape "${expected}" )"
+    printf '\t\t<key>actual</key>\n\t\t<string>%s</string>\n' "$( xmlEscape "${actual}" )"
+    printf '\t\t<key>criticality</key>\n\t\t<string>%s</string>\n' "$( xmlEscape "${criticality}" )"
+    printf '\t\t<key>message</key>\n\t\t<string>%s</string>\n' "$( xmlEscape "${message}" )"
+    printf '\t</dict>\n'
+
+}
+
+function buildInspectCompliancePlistXML() {
+
+    printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>'
+    printf '%s\n' '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">'
+    printf '%s\n' '<plist version="1.0">'
+    printf '%s\n' '<dict>'
+    printf '\t<key>lastComplianceCheck</key>\n\t<string>%s</string>\n' "$( xmlEscape "${reportTimestamp:-$( date '+%Y-%m-%dT%H:%M:%S%z' )}" )"
+
+    for (( i=0; i<listitemLength; i++ )); do
+        if [[ "${checkExecutedByIndex[${i}]}" == "true" ]]; then
+            buildInspectCompliancePlistEntryByIndex "${i}"
+        fi
+    done
+
+    printf '%s\n' '</dict>'
+    printf '%s\n' '</plist>'
+
+}
+
+function buildInspectPlistSourceKeyMappingsJSON() {
+
+    local separator=""
+    local criticality=""
+
+    printf '%s' "["
+    for (( i=0; i<listitemLength; i++ )); do
+        if [[ "${checkExecutedByIndex[${i}]}" == "true" ]]; then
+            criticality="$( getInspectComplianceCriticalityByIndex "${i}" )"
+            printf '%s' "${separator}{"
+            printf '%s' "\"key\":$( jsonString "${checkKeyByIndex[${i}]}" ),"
+            printf '%s' "\"displayName\":$( jsonString "${checkTitleByIndex[${i}]}" ),"
+            printf '%s' "\"category\":$( jsonString "$( getInspectComplianceCategoryByIndex "${i}" )" )"
+            if [[ "${criticality}" == "high" ]]; then
+                printf '%s' ",\"isCritical\":true"
+            fi
+            printf '%s' "}"
+            separator=","
+        fi
+    done
+    printf '%s' "]"
+
+}
+
+function buildInspectPlistSourcesJSON() {
+
+    printf '%s' "["
+    printf '%s' "{"
+    printf '%s' "\"path\":$( jsonString "${inspectCompliancePlistPath}" ),"
+    printf '%s' "\"type\":\"compliance\","
+    printf '%s' "\"displayName\":\"Mac Health Check Compliance\","
+    printf '%s' "\"icon\":\"SF=shield.checkered\","
+    printf '%s' "\"healthyLabel\":\"Healthy\","
+    printf '%s' "\"attentionLabel\":\"Needs Attention\","
+    printf '%s' "\"successValues\":[\"healthy\"],"
+    printf '%s' "\"excludeKeys\":[\"lastComplianceCheck\"],"
+    printf '%s' "\"keyMappings\":$( buildInspectPlistSourceKeyMappingsJSON )"
+    printf '%s' "}"
+    printf '%s' "]"
+
+}
+
+function buildInspectBentoCellsJSONForCategory() {
+
+    local category="${1}"
+    local separator=""
+    local cellCount=0
+    local column=0
+    local row=0
+
+    for (( i=0; i<listitemLength; i++ )); do
+        if [[ "${checkExecutedByIndex[${i}]}" == "true" ]] && [[ "$( getInspectComplianceCategoryByIndex "${i}" )" == "${category}" ]]; then
+            column=$(( cellCount % 3 ))
+            row=$(( cellCount / 3 ))
+            printf '%s' "${separator}{"
+            printf '%s' "\"id\":$( jsonString "${checkKeyByIndex[${i}]}" ),"
+            printf '%s' "\"column\":${column},"
+            printf '%s' "\"row\":${row},"
+            printf '%s' "\"title\":$( jsonString "${checkTitleByIndex[${i}]}" ),"
+            printf '%s' "\"sfSymbol\":$( jsonString "$( getInspectCheckSymbolByIndex "${i}" )" ),"
+            printf '%s' "\"contentType\":\"mixed\","
+            printf '%s' "\"iconSize\":36,"
+            printf '%s' "\"iconWeight\":\"semibold\","
+            printf '%s' "\"textSize\":\"small\","
+            printf '%s' "\"textColor\":\"#FFFFFF\","
+            printf '%s' "\"backgroundColor\":\"#1D2C22\""
+            printf '%s' "}"
+            separator=","
+            (( cellCount++ ))
+        fi
+    done
+
+}
+
+function buildInspectCategoryItemJSON() {
+
+    local category="${1}"
+    local displayName="${2}"
+    local icon="${3}"
+    local bentoCellsJSON=""
+
+    bentoCellsJSON="$( buildInspectBentoCellsJSONForCategory "${category}" )"
+    if [[ -z "${bentoCellsJSON}" ]]; then
+        return
+    fi
+
+    printf '%s' "{"
+    printf '%s' "\"displayName\":$( jsonString "${displayName}" ),"
+    printf '%s' "\"guidanceContent\":[{\"type\":\"bento-grid\",\"bentoColumns\":3,\"bentoRowHeight\":110,\"bentoCells\":[${bentoCellsJSON}]}],"
+    printf '%s' "\"guidanceTitle\":$( jsonString "${displayName} Status" ),"
+    printf '%s' "\"icon\":$( jsonString "${icon}" ),"
+    printf '%s' "\"id\":$( jsonString "$( sanitizeCheckKey "${displayName}" )" ),"
+    printf '%s' "\"stepType\":\"info\""
+    printf '%s' "}"
+
+}
+
 function buildInspectComparisonTableJSONByIndex() {
 
     local index="${1}"
@@ -3510,7 +3714,8 @@ function buildInspectOverviewGuidanceContentJSON() {
     printf '%s' "["
     printf '%s' "{\"content\":\"Mac Health Check Flow\",\"phases\":[\"Checks Complete\",\"Report Written\",\"Summary Available\",\"Cached Report Expires\"],\"currentPhase\":3,\"style\":\"stepper\",\"type\":\"phase-tracker\"},"
     printf '%s' "{\"content\":$( jsonString "$( getInspectIntroductionText )" ),\"type\":\"text\"},"
-    printf '%s' "$( buildInspectSummaryComparisonTableJSON ),"
+    printf '%s' "{\"type\":\"compliance-summary\",\"label\":\"Overall Compliance Status\"},"
+    printf '%s' "{\"type\":\"findings-list\"},"
     printf '%s' "{\"content\":$( jsonString "$( getInspectReplayExpirationMessage )" ),\"type\":\"info\"}"
     printf '%s' "]"
 
@@ -3756,25 +3961,60 @@ function buildInspectItemsJSONArray() {
 
     local sectionIcon="$( getInspectSectionIcon )"
     local separator=""
+    local categoryItemJSON=""
 
     printf '%s' "["
-    printf '%s' "{\"displayName\":\"Overview\",\"guidanceContent\":$( buildInspectIntroductionGuidanceContentJSON ),\"guidanceTitle\":\"Results Overview\",\"icon\":$( jsonString "${sectionIcon}" ),\"id\":\"overview\"}"
+    printf '%s' "{\"displayName\":\"Overview\",\"guidanceContent\":$( buildInspectIntroductionGuidanceContentJSON ),\"guidanceTitle\":\"Results Overview\",\"icon\":$( jsonString "${sectionIcon}" ),\"id\":\"overview\",\"stepType\":\"info\"}"
     separator=","
 
+    categoryItemJSON="$( buildInspectCategoryItemJSON "Security" "Security" "SF=lock.shield.fill" )"
+    if [[ -n "${categoryItemJSON}" ]]; then
+        printf '%s' "${separator}${categoryItemJSON}"
+        separator=","
+    fi
+
+    categoryItemJSON="$( buildInspectCategoryItemJSON "Maintenance" "Maintenance" "SF=wrench.and.screwdriver.fill" )"
+    if [[ -n "${categoryItemJSON}" ]]; then
+        printf '%s' "${separator}${categoryItemJSON}"
+        separator=","
+    fi
+
+    categoryItemJSON="$( buildInspectCategoryItemJSON "MDM" "MDM & Inventory" "SF=desktopcomputer.badge.checkmark" )"
+    if [[ -n "${categoryItemJSON}" ]]; then
+        printf '%s' "${separator}${categoryItemJSON}"
+        separator=","
+    fi
+
+    categoryItemJSON="$( buildInspectCategoryItemJSON "Connectivity" "Connectivity" "SF=wifi" )"
+    if [[ -n "${categoryItemJSON}" ]]; then
+        printf '%s' "${separator}${categoryItemJSON}"
+        separator=","
+    fi
+
+    categoryItemJSON="$( buildInspectCategoryItemJSON "Applications" "Applications" "SF=square.grid.2x2.fill" )"
+    if [[ -n "${categoryItemJSON}" ]]; then
+        printf '%s' "${separator}${categoryItemJSON}"
+        separator=","
+    fi
+
     if inspectUnhealthyResultsExist; then
-        printf '%s' "${separator}{\"displayName\":\"Unhealthy\",\"guidanceContent\":$( buildInspectUnhealthyResultsGuidanceContentJSON ),\"guidanceTitle\":\"Unhealthy Results\",\"icon\":$( jsonString "${sectionIcon}" ),\"id\":\"unhealthy\"}"
+        printf '%s' "${separator}{\"displayName\":\"Unhealthy\",\"guidanceContent\":$( buildInspectUnhealthyResultsGuidanceContentJSON ),\"guidanceTitle\":\"Unhealthy Results\",\"icon\":$( jsonString "${sectionIcon}" ),\"id\":\"unhealthy\",\"stepType\":\"info\"}"
+        separator=","
     fi
 
     if inspectHealthyResultsExist; then
-        printf '%s' "${separator}{\"displayName\":\"Healthy\",\"guidanceContent\":$( buildInspectHealthyResultsGuidanceContentJSON ),\"guidanceTitle\":\"Healthy Results\",\"icon\":$( jsonString "${sectionIcon}" ),\"id\":\"healthy\"}"
+        printf '%s' "${separator}{\"displayName\":\"Healthy\",\"guidanceContent\":$( buildInspectHealthyResultsGuidanceContentJSON ),\"guidanceTitle\":\"Healthy Results\",\"icon\":$( jsonString "${sectionIcon}" ),\"id\":\"healthy\",\"stepType\":\"info\"}"
+        separator=","
     fi
 
     if ! inspectUnhealthyResultsExist && ! inspectHealthyResultsExist; then
-        printf '%s' "${separator}{\"displayName\":\"Results\",\"guidanceContent\":$( buildInspectFallbackResultsGuidanceContentJSON ),\"guidanceTitle\":\"Results\",\"icon\":$( jsonString "${sectionIcon}" ),\"id\":\"results\"}"
+        printf '%s' "${separator}{\"displayName\":\"Results\",\"guidanceContent\":$( buildInspectFallbackResultsGuidanceContentJSON ),\"guidanceTitle\":\"Results\",\"icon\":$( jsonString "${sectionIcon}" ),\"id\":\"results\",\"stepType\":\"info\"}"
+        separator=","
     fi
 
-    printf '%s' "${separator}{\"displayName\":\"Help & Support\",\"guidanceContent\":$( buildInspectHelpGuidanceContentJSON ),\"guidanceTitle\":\"Help & Support\",\"icon\":$( jsonString "${sectionIcon}" ),\"id\":\"help\"}"
-    printf '%s' "${separator}{\"displayName\":\"Next Steps\",\"guidanceContent\":$( buildInspectNextStepsGuidanceContentJSON ),\"guidanceTitle\":\"Next Steps\",\"icon\":$( jsonString "${sectionIcon}" ),\"id\":\"nextSteps\"}"
+    printf '%s' "${separator}{\"displayName\":\"Help & Support\",\"guidanceContent\":$( buildInspectHelpGuidanceContentJSON ),\"guidanceTitle\":\"Help & Support\",\"icon\":$( jsonString "${sectionIcon}" ),\"id\":\"help\",\"stepType\":\"info\"}"
+    separator=","
+    printf '%s' "${separator}{\"displayName\":\"Next Steps\",\"guidanceContent\":$( buildInspectNextStepsGuidanceContentJSON ),\"guidanceTitle\":\"Next Steps\",\"icon\":$( jsonString "${sectionIcon}" ),\"id\":\"nextSteps\",\"stepType\":\"info\"}"
     printf '%s' "]"
 
 }
@@ -3790,6 +4030,10 @@ function buildInspectConfigJSON() {
     printf '%s' "\"title\":$( jsonString "$( getInspectWindowTitle )" ),"
     printf '%s' "\"highlightColor\":$( jsonString "${inspectHighlightColor}" ),"
     printf '%s' "\"moveable\":true,"
+    printf '%s' "\"triggerFile\":$( jsonString "${inspectTriggerFilePath}" ),"
+    printf '%s' "\"readinessFile\":$( jsonString "${inspectReadinessFilePath}" ),"
+    printf '%s' "\"resultFile\":$( jsonString "${inspectResultFilePath}" ),"
+    printf '%s' "\"plistSources\":$( buildInspectPlistSourcesJSON ),"
     printf '%s' "\"items\":$( buildInspectItemsJSONArray ),"
     printf '%s' "\"height\":${inspectWindowHeight},"
     printf '%s' "\"width\":${inspectWindowWidth}"
@@ -3807,6 +4051,32 @@ function validateInspectConfigFile() {
         and (.title | length > 0)
         and (.highlightColor | type == "string")
         and (.highlightColor | length > 0)
+        and (.triggerFile | type == "string")
+        and (.triggerFile | length > 0)
+        and (.readinessFile | type == "string")
+        and (.readinessFile | length > 0)
+        and (.resultFile | type == "string")
+        and (.resultFile | length > 0)
+        and (.plistSources | type == "array")
+        and (.plistSources | length > 0)
+        and all(.plistSources[];
+            (.path | type == "string")
+            and (.path | length > 0)
+            and (.type == "compliance")
+            and (.healthyLabel | type == "string")
+            and (.attentionLabel | type == "string")
+            and (.successValues | type == "array")
+            and (.successValues | index("healthy") != null)
+            and (.keyMappings | type == "array")
+            and all(.keyMappings[];
+                (.key | type == "string")
+                and (.key | length > 0)
+                and (.displayName | type == "string")
+                and (.displayName | length > 0)
+                and (.category | type == "string")
+                and (.category | length > 0)
+            )
+        )
         and (.height == 750)
         and (.width == 975)
         and (.items | type == "array")
@@ -3842,6 +4112,25 @@ function validateInspectConfigFile() {
                         and (.phases | type == "array") and (.phases | length > 0)
                         and all(.phases[]; (type == "string") and (length > 0))
                         and (.currentPhase | type == "number")
+                    elif .type == "compliance-summary" then
+                        ((.label? // "Overall Compliance Status") | type == "string")
+                    elif .type == "findings-list" then
+                        true
+                    elif .type == "bento-grid" then
+                        (.bentoColumns | type == "number")
+                        and (.bentoRowHeight | type == "number")
+                        and (.bentoCells | type == "array")
+                        and (.bentoCells | length > 0)
+                        and all(.bentoCells[];
+                            (.id | type == "string")
+                            and (.id | length > 0)
+                            and (.column | type == "number")
+                            and (.row | type == "number")
+                            and (.title | type == "string")
+                            and (.title | length > 0)
+                            and (.sfSymbol | type == "string")
+                            and (.sfSymbol | length > 0)
+                        )
                     else
                         (.content | type == "string") and (.content | length > 0)
                     end)
@@ -3895,6 +4184,48 @@ function prepareInspectLaunchLogForUser() {
 
 }
 
+function prepareInspectCompliancePlistForUser() {
+
+    if [[ ! -e "${inspectCompliancePlistPath}" ]]; then
+        warning "Inspect Summary: compliance plist is unavailable at ${inspectCompliancePlistPath}."
+        return 1
+    fi
+
+    if ! chown "${loggedInUser}" "${inspectCompliancePlistPath}" 2>/dev/null; then
+        warning "Inspect Summary: failed to set ownership on ${inspectCompliancePlistPath} for ${loggedInUser}."
+        return 1
+    fi
+
+    if ! chmod 600 "${inspectCompliancePlistPath}" 2>/dev/null; then
+        warning "Inspect Summary: failed to set permissions on ${inspectCompliancePlistPath}."
+        return 1
+    fi
+
+    return 0
+
+}
+
+function generateInspectCompliancePlist() {
+
+    local inspectCompliancePlistXML=""
+
+    inspectCompliancePlistXML="$( buildInspectCompliancePlistXML )"
+    writeReadableTextFile "${inspectCompliancePlistPath}" "${inspectCompliancePlistXML}"
+
+    if ! /usr/bin/plutil -lint "${inspectCompliancePlistPath}" >/dev/null 2>&1; then
+        warning "Inspect Summary: generated compliance plist failed validation at ${inspectCompliancePlistPath}."
+        return 1
+    fi
+
+    if ! prepareInspectCompliancePlistForUser; then
+        return 1
+    fi
+
+    notice "Inspect Summary: wrote ${inspectCompliancePlistPath}."
+    return 0
+
+}
+
 function generateInspectSummaryAssets() {
 
     local inspectConfigJSON=""
@@ -3904,6 +4235,10 @@ function generateInspectSummaryAssets() {
     fi
 
     inspectConfigJSON="$( buildInspectConfigJSON )"
+
+    if ! generateInspectCompliancePlist; then
+        return 1
+    fi
 
     if ! validateJson "${inspectConfigJSON}"; then
         warning "Inspect Summary: generated inspect config JSON failed validation."
@@ -3941,6 +4276,15 @@ function launchInspectSummary() {
     fi
 
     if ! prepareInspectConfigForUser "${inspectConfigToLaunch}"; then
+        return 1
+    fi
+
+    if [[ ! -r "${inspectCompliancePlistPath}" ]]; then
+        warning "Inspect Summary: compliance plist is not readable at ${inspectCompliancePlistPath}."
+        return 1
+    fi
+
+    if ! prepareInspectCompliancePlistForUser; then
         return 1
     fi
 

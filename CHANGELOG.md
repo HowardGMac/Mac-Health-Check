@@ -2,7 +2,7 @@
 
 ## CHANGELOG
 
-### 4.0.0b19 (27-Apr-2026)
+### 4.0.0b20 (28-Apr-2026)
 - Added JSON health reporting (with optional Splunk HTTP Event Collector (HEC) delivery)
 - Added a stand-alone swiftDialog Inspect Mode-flavored report (i.e., `inspectSummaryPreset="on"`), plus cached replay (i.e., `inspectReplayMaximumAgeSeconds`) for `Self Service` runs
 - Refactored `checkElectronCornerMask` to reduce execution time
@@ -28,6 +28,11 @@
 - Fixed truncated `Run` command-preview log entries by joining and quoting command arguments before logging user-context helper invocations
 - Normalized client-side cache, LaunchDaemon validation/loading, and Jamf external-check helper output so field logs stay MHC-prefixed
 - Tightened cached-report validation and cached Splunk upload state so cached upload failures no longer look like successful report generation
+- Updated the detached swiftDialog Inspect Mode Preset 6 report for swiftDialog `3.1.0.4977` compliance findings
+- Added a live compliance plist source for `compliance-summary`, `findings-list` and bento-grid `BentoPlistDetailSheet` popovers
+- Added Inspect Mode trigger, readiness and result control file paths to generated Preset 6 configs
+- Updated the Preset 6 demo resources to use source-level labels and cell IDs that bind directly to plist keys
+- Raised the minimum required swiftDialog version to `3.1.0.4977`
 
 ### 3.0.0 (23-Feb-2026)
 **First (attempt at a) MDM-agnostic release**
