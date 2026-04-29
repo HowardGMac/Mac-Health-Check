@@ -17,7 +17,7 @@
 #
 # HISTORY
 #
-# Version 4.0.0b22, 29-Apr-2026, Dan K. Snelson (@dan-snelson)
+# Version 4.0.0b23, 29-Apr-2026, Dan K. Snelson (@dan-snelson)
 # - Added JSON health reporting (with optional Splunk HTTP Event Collector (HEC) delivery)
 # - Added a stand-alone swiftDialog Inspect Mode-flavored report (i.e., `inspectSummaryPreset="on"`), plus cached replay (i.e., `inspectReplayMaximumAgeSeconds`) for `Self Service` runs
 # - Refactored `checkElectronCornerMask` to reduce execution time
@@ -45,6 +45,8 @@
 # - Refactored swiftDialog pre-flight updates to skip redundant production package downloads when the installed release already matches the latest production build
 # - Refactored Silent full health-check runs to generate Inspect Mode config assets without launching swiftDialog
 # - Improved external-check result parsing, logging and client-side cache installs
+# - Refactored `updateComputerInventory()` to show an end-user warning state when `jamf recon` fails instead of always reporting success
+# - Added a `90`-second timeout for `jamf recon` during `updateComputerInventory()`, with timeout-specific logging and end-user messaging
 #
 ####################################################################################################
 
@@ -59,7 +61,7 @@
 export PATH=/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin/
 
 # Script Version
-scriptVersion="4.0.0b22"
+scriptVersion="4.0.0b23"
 
 # Client-side Log
 scriptLog="/var/log/org.churchofjesuschrist.log"
@@ -723,6 +725,7 @@ fi
 # Initialize Jamf Pro inventory endUsername variable (thanks, @tonyyo11!)
 inventoryEndUsername=""
 inventoryEndUsernameSource="None"
+inventorySubmissionTimeoutSeconds="90"
 kerberosSSOeResult="Not configured"
 
 # Kerberos Single Sign-on Extension
@@ -1984,6 +1987,59 @@ function captureRunAsUserOutput() {
     info "Run \"${commandPreview}\" as \"$loggedInUserID\" … " 1>&2
     commandOutput="$( launchctl asuser "$loggedInUserID" sudo -u "$loggedInUser" "$@" 2>&1 )"
     commandExitCode=$?
+
+    printf '%s' "${commandOutput}"
+    return "${commandExitCode}"
+
+}
+
+function captureCommandOutputWithTimeout() {
+
+    local timeoutSeconds="${1}"
+    shift
+    local outputFile=""
+    local commandOutput=""
+    local commandExitCode=0
+    local commandPID=0
+    local commandStartSeconds=0
+    local timeoutGracePeriodSeconds=5
+    local timeoutTimedOut="false"
+
+    outputFile="$( mktemp -t mhc-command-output )" || return 1
+    commandStartSeconds="${SECONDS}"
+
+    ( "$@" ) > "${outputFile}" 2>&1 &
+    commandPID=$!
+
+    while kill -0 "${commandPID}" 2>/dev/null; do
+        if (( SECONDS - commandStartSeconds >= timeoutSeconds )); then
+            timeoutTimedOut="true"
+            kill -TERM "${commandPID}" 2>/dev/null
+
+            local timeoutGraceStartSeconds="${SECONDS}"
+            while kill -0 "${commandPID}" 2>/dev/null && (( SECONDS - timeoutGraceStartSeconds < timeoutGracePeriodSeconds )); do
+                sleep 1
+            done
+
+            if kill -0 "${commandPID}" 2>/dev/null; then
+                kill -KILL "${commandPID}" 2>/dev/null
+            fi
+
+            wait "${commandPID}" 2>/dev/null
+            commandExitCode=124
+            break
+        fi
+
+        sleep 1
+    done
+
+    if [[ "${timeoutTimedOut}" != "true" ]]; then
+        wait "${commandPID}"
+        commandExitCode=$?
+    fi
+
+    commandOutput="$( < "${outputFile}" )"
+    rm -f "${outputFile}"
 
     printf '%s' "${commandOutput}"
     return "${commandExitCode}"
@@ -7910,22 +7966,30 @@ function checkAirDropSettings() {
 
 function updateComputerInventory() {
 
+    local humanReadableCheckName="Update Computer Inventory"
     local inventoryCommand=()
     local inventoryCommandPreview=""
     local inventoryOutput=""
     local inventoryExitCode=0
+    local inventoryFailureSubtitle="Please try again later"
+    local inventoryTimeoutSubtitle=""
 
     if [[ "${operationMode}" == "Silent" ]] && [[ "${splunkOperationMode}" == "production" ]]; then
         notice "Skipping Jamf Pro inventory update: Operation Mode is ${operationMode} and Splunk Reporting is ${splunkOperationMode}"
         return 0
     else
-        notice "Updating Computer Inventory …"
+        notice "${humanReadableCheckName} …"
     fi
+
+    if [[ -n "${supportTeamName}" ]]; then
+        inventoryFailureSubtitle+=" or contact ${supportTeamName}"
+    fi
+    inventoryTimeoutSubtitle="Inventory update took longer than ${inventorySubmissionTimeoutSeconds} seconds. ${inventoryFailureSubtitle}"
 
     dialogUpdate "icon: SF=pencil.and.list.clipboard,${organizationColorScheme}"
     dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill $(echo "${organizationColorScheme}" | tr ',' ' '), iconalpha: 1, status: wait, statustext: Updating …"
     dialogUpdate "progress: increment"
-    dialogUpdate "progresstext: Updating Computer Inventory …"
+    dialogUpdate "progresstext: ${humanReadableCheckName} …"
 
     if [[ "${operationMode}" != "Test" ]]; then
 
@@ -7938,24 +8002,28 @@ function updateComputerInventory() {
         fi
 
         inventoryCommandPreview="$( formatCommandForLog "${inventoryCommand[@]}" )"
-        inventoryOutput="$( "${inventoryCommand[@]}" 2>&1 )"
+        inventoryOutput="$( captureCommandOutputWithTimeout "${inventorySubmissionTimeoutSeconds}" "${inventoryCommand[@]}" )"
         inventoryExitCode=$?
+        inventoryOutput="${inventoryOutput//$'\r'/ }"
+        inventoryOutput="${inventoryOutput//$'\n'/; }"
 
-        if (( inventoryExitCode != 0 )); then
-            inventoryOutput="${inventoryOutput//$'\r'/ }"
-            inventoryOutput="${inventoryOutput//$'\n'/; }"
-            warning "jamf recon exited ${inventoryExitCode}${inventoryOutput:+: ${inventoryOutput}}"
+        if (( inventoryExitCode == 124 )); then
+            warning "${humanReadableCheckName}: jamf recon timed out after ${inventorySubmissionTimeoutSeconds} seconds${inventoryOutput:+: ${inventoryOutput}}"
+            dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorError}, iconalpha: 1, subtitle: ${inventoryTimeoutSubtitle}, status: error, statustext: Timed Out"
+        elif (( inventoryExitCode != 0 )); then
+            warning "${humanReadableCheckName}: jamf recon exited ${inventoryExitCode}${inventoryOutput:+: ${inventoryOutput}}"
+            dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorError}, iconalpha: 1, subtitle: Inventory update failed. ${inventoryFailureSubtitle}, status: error, statustext: Failed"
         else
-            info "Completed \"${inventoryCommandPreview}\""
+            info "${humanReadableCheckName}: Completed \"${inventoryCommandPreview}\""
+            dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: Latest computer inventory submitted at $( date '+%A, %B %d at %I:%M %p %Z' ), status: success, statustext: Updated"
         fi
 
     else
 
         sleep "${anticipationDuration}"
+        dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: Latest computer inventory submitted at $( date '+%A, %B %d at %I:%M %p %Z' ), status: success, statustext: Updated"
 
     fi
-
-    dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=semibold colour=${statusColorSuccess}, iconalpha: 0.9, subtitle: Latest computer inventory submitted at $( date '+%A, %B %d at %I:%M %p %Z' ), status: success, statustext: Updated"
 
 }
 

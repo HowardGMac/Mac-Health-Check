@@ -194,6 +194,8 @@ The following health checks and information reporting are included in version `4
 *Requires [external check](/external-checks/README.md)
 **Requires Jamf Pro
 
+Jamf Pro inventory submission is a final follow-up action. In full Jamf Pro runs, `updateComputerInventory()` now surfaces failed or timed-out `jamf recon` submissions to the end-user, and times out that submission after `90` seconds.
+
 ### Information Reporting
 
 <img src="images/MHC_3.2.0_Helpmessage.png" alt="In progress" width="800"/>
