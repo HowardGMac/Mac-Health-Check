@@ -2,7 +2,7 @@
 
 ## CHANGELOG
 
-### 4.0.0b21 (28-Apr-2026)
+### 4.0.0b22 (29-Apr-2026)
 - Added JSON health reporting (with optional Splunk HTTP Event Collector (HEC) delivery)
 - Added a stand-alone swiftDialog Inspect Mode-flavored report (i.e., `inspectSummaryPreset="on"`), plus cached replay (i.e., `inspectReplayMaximumAgeSeconds`) for `Self Service` runs
 - Refactored full `Silent` health-check runs to write `/var/tmp/MacHealthCheck-Inspect-Config.json` and `/var/tmp/MacHealthCheck-Inspect-Compliance.plist` without launching swiftDialog
@@ -35,6 +35,7 @@
 - Updated the Preset 6 demo resources to use source-level labels and cell IDs that bind directly to plist keys
 - Raised the minimum required swiftDialog version to `3.1.0.4977`
 - Refactored swiftDialog pre-flight updates to skip redundant production package downloads when the installed release already matches the latest production build
+- Improved external-check result parsing, logging and client-side cache installs
 
 ### 3.0.0 (23-Feb-2026)
 **First (attempt at a) MDM-agnostic release**

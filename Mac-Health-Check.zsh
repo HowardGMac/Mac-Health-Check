@@ -17,7 +17,7 @@
 #
 # HISTORY
 #
-# Version 4.0.0b21, 28-Apr-2026, Dan K. Snelson (@dan-snelson)
+# Version 4.0.0b22, 29-Apr-2026, Dan K. Snelson (@dan-snelson)
 # - Added JSON health reporting (with optional Splunk HTTP Event Collector (HEC) delivery)
 # - Added a stand-alone swiftDialog Inspect Mode-flavored report (i.e., `inspectSummaryPreset="on"`), plus cached replay (i.e., `inspectReplayMaximumAgeSeconds`) for `Self Service` runs
 # - Refactored `checkElectronCornerMask` to reduce execution time
@@ -44,6 +44,7 @@
 # - Added Inspect Mode trigger, readiness, result and compliance plist control files for more reliable inspect workflows
 # - Refactored swiftDialog pre-flight updates to skip redundant production package downloads when the installed release already matches the latest production build
 # - Refactored Silent full health-check runs to generate Inspect Mode config assets without launching swiftDialog
+# - Improved external-check result parsing, logging and client-side cache installs
 #
 ####################################################################################################
 
@@ -58,7 +59,7 @@
 export PATH=/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin/
 
 # Script Version
-scriptVersion="4.0.0b21"
+scriptVersion="4.0.0b22"
 
 # Client-side Log
 scriptLog="/var/log/org.churchofjesuschrist.log"
@@ -616,8 +617,10 @@ rosettaRequiredAppsRaw=$(
         <( mdfind 'kMDItemExecutableArchitectures == arm64' | sort )
 )
 if [[ -n "${rosettaRequiredAppsRaw}" ]]; then
-    rosettaRequiredApps=$( echo "${rosettaRequiredAppsRaw}" | awk 'NF {printf "%s%s", sep, $0; sep=", "}' )
+    rosettaRequiredAppCount=$( printf '%s\n' "${rosettaRequiredAppsRaw}" | sed '/^$/d' | wc -l | xargs )
+    rosettaRequiredApps="${rosettaRequiredAppCount} app(s)"
 else
+    rosettaRequiredAppCount="0"
     rosettaRequiredApps="None detected"
 fi
 
@@ -1023,7 +1026,7 @@ remainingChecks="0"
 completedCheckIndicesCsv=","
 
 # swiftDialog JSON File
-dialogJSONFile=$( mktemp -u /var/tmp/dialogJSONFile_${organizationScriptName}.XXXX )
+dialogJSONFile=$( mktemp /var/tmp/dialogJSONFile_${organizationScriptName}.XXXX )
 
 # swiftDialog Command File
 dialogCommandFile=$( mktemp /var/tmp/dialogCommandFile_${organizationScriptName}.XXXX )
@@ -2783,6 +2786,8 @@ function sendCachedSplunkReport() {
 function installClientSideScript() {
 
     local temporaryClientScript=""
+    local sanitizedClientScript=""
+    local temporaryLaunchDaemonPath=""
     local launchctlOutput=""
     local launchDaemonValidationOutput=""
 
@@ -2806,9 +2811,11 @@ function installClientSideScript() {
     chmod 755 "${organizationDirectory}" 2>/dev/null
 
     temporaryClientScript="$( mktemp "/var/tmp/${organizationScriptName}.client.XXXXXX" )"
+    sanitizedClientScript="$( mktemp "/var/tmp/${organizationScriptName}.sanitized.XXXXXX" )"
+    temporaryLaunchDaemonPath="$( mktemp "/var/tmp/${launchDaemonLabel}.XXXXXX" )"
     cp "${currentScriptPath}" "${temporaryClientScript}" || {
         warning "Client-Side Cache: unable to copy ${currentScriptPath} to temporary client script."
-        rm -f "${temporaryClientScript}"
+        rm -f "${temporaryClientScript}" "${sanitizedClientScript}" "${temporaryLaunchDaemonPath}"
         return 1
     }
 
@@ -2828,26 +2835,23 @@ function installClientSideScript() {
         /updateComputerInventory/ { next }
         /jamf[[:space:]]recon/ { next }
         { print }
-    ' "${temporaryClientScript}" > "${clientSideScriptPath}" || {
+    ' "${temporaryClientScript}" > "${sanitizedClientScript}" || {
         warning "Client-Side Cache: unable to write sanitized client-side script."
-        rm -f "${temporaryClientScript}"
+        rm -f "${temporaryClientScript}" "${sanitizedClientScript}" "${temporaryLaunchDaemonPath}"
         return 1
     }
 
-    sed -i '' '/"title" : "Network Quality Test"/ s/},$/}/' "${clientSideScriptPath}"
+    sed -i '' '/"title" : "Network Quality Test"/ s/},$/}/' "${sanitizedClientScript}"
 
     rm -f "${temporaryClientScript}"
 
-    if grep -q "jamf"" recon" "${clientSideScriptPath}" 2>/dev/null; then
+    if grep -q "jamf"" recon" "${sanitizedClientScript}" 2>/dev/null; then
         warning "Client-Side Cache: sanitized client-side script still contains Jamf inventory command text; install failed."
-        rm -f "${clientSideScriptPath}"
+        rm -f "${sanitizedClientScript}" "${temporaryLaunchDaemonPath}"
         return 1
     fi
 
-    chown root:wheel "${clientSideScriptPath}" 2>/dev/null
-    chmod 755 "${clientSideScriptPath}" 2>/dev/null
-
-    cat > "${launchDaemonPath}" <<ENDOFLAUNCHDAEMON
+    cat > "${temporaryLaunchDaemonPath}" <<ENDOFLAUNCHDAEMON
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -2886,13 +2890,40 @@ function installClientSideScript() {
 </plist>
 ENDOFLAUNCHDAEMON
 
-    if ! launchDaemonValidationOutput=$( plutil -lint "${launchDaemonPath}" 2>&1 ); then
+    if ! launchDaemonValidationOutput=$( plutil -lint "${temporaryLaunchDaemonPath}" 2>&1 ); then
         warning "Client-Side Cache: generated LaunchDaemon plist failed validation at ${launchDaemonPath}: ${launchDaemonValidationOutput}"
+        rm -f "${sanitizedClientScript}" "${temporaryLaunchDaemonPath}"
         return 1
     else
         info "Client-Side Cache: generated LaunchDaemon plist validated at ${launchDaemonPath}"
     fi
 
+    if [[ -f "${clientSideScriptPath}" ]] && [[ -f "${launchDaemonPath}" ]] \
+        && cmp -s "${sanitizedClientScript}" "${clientSideScriptPath}" \
+        && cmp -s "${temporaryLaunchDaemonPath}" "${launchDaemonPath}"; then
+        chown root:wheel "${clientSideScriptPath}" "${launchDaemonPath}" 2>/dev/null
+        chmod 755 "${clientSideScriptPath}" 2>/dev/null
+        chmod 644 "${launchDaemonPath}" 2>/dev/null
+        rm -f "${sanitizedClientScript}" "${temporaryLaunchDaemonPath}"
+        notice "Client-Side Cache: client-side assets already current; install skipped."
+        return 0
+    fi
+
+    cp "${sanitizedClientScript}" "${clientSideScriptPath}" || {
+        warning "Client-Side Cache: unable to update ${clientSideScriptPath}"
+        rm -f "${sanitizedClientScript}" "${temporaryLaunchDaemonPath}"
+        return 1
+    }
+    cp "${temporaryLaunchDaemonPath}" "${launchDaemonPath}" || {
+        warning "Client-Side Cache: unable to update ${launchDaemonPath}"
+        rm -f "${sanitizedClientScript}" "${temporaryLaunchDaemonPath}"
+        return 1
+    }
+
+    rm -f "${sanitizedClientScript}" "${temporaryLaunchDaemonPath}"
+
+    chown root:wheel "${clientSideScriptPath}" 2>/dev/null
+    chmod 755 "${clientSideScriptPath}" 2>/dev/null
     chown root:wheel "${launchDaemonPath}" 2>/dev/null
     chmod 644 "${launchDaemonPath}" 2>/dev/null
 
@@ -3416,13 +3447,13 @@ function getInspectCheckSymbolByIndex() {
             echo "key"
             ;;
         *airdrop* )
-            echo "airdrop"
+            echo "dot.radiowaves.left.and.right"
             ;;
         *airplay*receiver* )
             echo "airplayaudio"
             ;;
         *bluetooth*sharing* )
-            echo "bluetooth"
+            echo "dot.radiowaves.right"
             ;;
         *mdm*profile* )
             echo "checkmark.shield"
@@ -3449,13 +3480,13 @@ function getInspectCheckSymbolByIndex() {
             echo "person.text.rectangle"
             ;;
         *homebrew* )
-            echo "shippingbox"
+            echo "mug.fill"
             ;;
         *electron* )
             echo "bolt.circle"
             ;;
         *teams* )
-            echo "folder.fill.badge.plus"
+            echo "app.translucent"
             ;;
         * )
             echo "$( getInspectStatusIcon "${checkNormalizedStatusByIndex[${index}]}" )"
@@ -4577,6 +4608,9 @@ function quitScript() {
     local warningCheckCount=0
     local failureCheckCount=0
     local inspectSummaryLaunched="false"
+    local timeMachineSummary="${tmStatus}"
+
+    [[ -n "${tmLastBackup}" ]] && timeMachineSummary+=" ${tmLastBackup}"
 
     rebuildOverallHealthFromRecordedResults
     calculateOverallReportStatus
@@ -4586,7 +4620,7 @@ function quitScript() {
 
     quitOut "Exiting …"
 
-    notice "${localAdminWarning}User: ${loggedInUserFullname} (${loggedInUser}) [${loggedInUserID}] ${loggedInUserGroupMembership}; Security Mode: ${bootPoliciesSecurityMode}; DEP-allowed MDM Control: ${bootPoliciesDepAllowedMdmControl}; Activation Lock: ${activationLockStatus}; ${bootstrapTokenStatus}; sudo Check: ${sudoStatus}; sudoers: ${sudoAllLines}; Kerberos SSOe: ${kerberosSSOeResult}; Platform SSOe: ${platformSSOeResult}; Location Services: ${locationServicesStatus}; SSH: ${sshStatus}; Microsoft OneDrive Sync Date: ${oneDriveSyncDate}; Time Machine Backup Date: ${tmStatus} ${tmLastBackup}; Battery Cycle Count: ${batteryCycleCount}; Rosetta-required apps: ${rosettaRequiredApps}; Wi-Fi: ${ssid}; ${activeIPAddress//\*\*/}; VPN IP: ${vpnStatus} ${vpnExtendedStatus}; ${networkTimeServer}"
+    notice "${localAdminWarning}User: ${loggedInUserFullname} (${loggedInUser}) [${loggedInUserID}]; Security Mode: ${bootPoliciesSecurityMode}; DEP-allowed MDM Control: ${bootPoliciesDepAllowedMdmControl}; Activation Lock: ${activationLockStatus}; ${bootstrapTokenStatus}; Location Services: ${locationServicesStatus}; SSH: ${sshStatus}; Microsoft OneDrive Sync Date: ${oneDriveSyncDate}; Time Machine Backup Date: ${timeMachineSummary}; Battery Cycle Count: ${batteryCycleCount}; Rosetta-required apps: ${rosettaRequiredApps}; Wi-Fi: ${ssid}; VPN: ${vpnStatus}; ${networkTimeServer}"
 
     case ${mdmVendor} in
 
@@ -7155,9 +7189,9 @@ function checkVPN() {
 
 function checkExternalJamfPro() {
 
-    trigger="${2}"
-    appPath="${3}"
-    appDisplayName=$(basename "${appPath}" .app)
+    local trigger="${2}"
+    local appPath="${3}"
+    local appDisplayName="${${appPath:t}%.app}"
     local footerCheckIcon="${appPath}"
     local footerStatusColor="${statusColorSuccess}"
     local externalCheckResult=""
@@ -7165,6 +7199,10 @@ function checkExternalJamfPro() {
     local externalValidation=""
     local externalPolicyOutput=""
     local externalPolicyExitCode=0
+    local checkStatus=""
+    local checkType=""
+    local checkExtended=""
+    local fallbackErrorDetail="Error"
 
     if [[ -n $( defaults read "${organizationDefaultsDomain}" 2>/dev/null ) ]]; then
         defaults delete "${organizationDefaultsDomain}"
@@ -7184,10 +7222,18 @@ function checkExternalJamfPro() {
     if (( externalPolicyExitCode != 0 )); then
         info "External Check: Jamf policy trigger '${trigger}' exited ${externalPolicyExitCode}; evaluating available result output."
     fi
-    externalValidation=$( printf '%s\n' "${externalPolicyOutput}" | grep "Script result:" | tail -1 )
-    externalCheckResult="${externalValidation#*Script result: }"
-    externalCheckResult="${externalCheckResult#<result>}"
+    externalValidation=$( printf '%s\n' "${externalPolicyOutput}" | sed -n 's/.*Script result:[[:space:]]*//p' | tail -1 )
+    if [[ -z "${externalValidation}" ]]; then
+        externalValidation=$( printf '%s\n' "${externalPolicyOutput}" | sed -n 's#.*<result>\(.*\)</result>.*#\1#p' | tail -1 )
+    fi
+    externalCheckResult="${externalValidation#<result>}"
     externalCheckResult="${externalCheckResult%</result>}"
+    externalCheckResult="${externalCheckResult//$'\r'/}"
+    externalCheckResult="${externalCheckResult//$'\n'/; }"
+    externalCheckResult="${externalCheckResult#"${externalCheckResult%%[![:space:]]*}"}"
+    externalCheckResult="${externalCheckResult%"${externalCheckResult##*[![:space:]]}"}"
+    (( externalPolicyExitCode != 0 )) && fallbackErrorDetail="Policy exit ${externalPolicyExitCode}"
+    [[ -n "${externalCheckResult}" ]] && fallbackErrorDetail="${externalCheckResult}"
     
     # Leverage the organization defaults domain
     if [[ -n $( defaults read "${organizationDefaultsDomain}" 2>/dev/null ) ]]; then
@@ -7268,7 +7314,7 @@ function checkExternalJamfPro() {
 
             *"error"* | * )
                 dialogUpdate "listitem: index: ${1}, icon: SF=$(printf "%02d" $(($1+1))).circle.fill weight=bold colour=${statusColorError}, iconalpha: 1, status: error, statustext: Error"
-                errorOut "${appDisplayName} Error"
+                errorOut "${appDisplayName} ${fallbackErrorDetail}"
                 overallHealth+="${appDisplayName}; "
                 footerCheckIcon="SF=exclamationmark.triangle.fill"
                 footerStatusColor="${statusColorError}"
@@ -7864,6 +7910,11 @@ function checkAirDropSettings() {
 
 function updateComputerInventory() {
 
+    local inventoryCommand=()
+    local inventoryCommandPreview=""
+    local inventoryOutput=""
+    local inventoryExitCode=0
+
     if [[ "${operationMode}" == "Silent" ]] && [[ "${splunkOperationMode}" == "production" ]]; then
         notice "Skipping Jamf Pro inventory update: Operation Mode is ${operationMode} and Splunk Reporting is ${splunkOperationMode}"
         return 0
@@ -7880,18 +7931,22 @@ function updateComputerInventory() {
 
         if [[ -n "${inventoryEndUsername}" ]]; then
             notice "Including '-endUsername' in 'jamf recon' (source: ${inventoryEndUsernameSource}; value: ${inventoryEndUsername})"
-            if [[ "${suppressNonSplunkConsoleLogging}" == "true" ]]; then
-                jamf recon -endUsername "${inventoryEndUsername}" >> "${scriptLog}" 2>&1
-            else
-                jamf recon -endUsername "${inventoryEndUsername}"
-            fi
+            inventoryCommand=( jamf recon -endUsername "${inventoryEndUsername}" )
         else
             warning "NOT including '-endUsername' in 'jamf recon' since no SSO username is available for ${loggedInUser} (source: ${inventoryEndUsernameSource}; value: <empty>)"
-            if [[ "${suppressNonSplunkConsoleLogging}" == "true" ]]; then
-                jamf recon >> "${scriptLog}" 2>&1 # -verbose
-            else
-                jamf recon # -verbose
-            fi
+            inventoryCommand=( jamf recon )
+        fi
+
+        inventoryCommandPreview="$( formatCommandForLog "${inventoryCommand[@]}" )"
+        inventoryOutput="$( "${inventoryCommand[@]}" 2>&1 )"
+        inventoryExitCode=$?
+
+        if (( inventoryExitCode != 0 )); then
+            inventoryOutput="${inventoryOutput//$'\r'/ }"
+            inventoryOutput="${inventoryOutput//$'\n'/; }"
+            warning "jamf recon exited ${inventoryExitCode}${inventoryOutput:+: ${inventoryOutput}}"
+        else
+            info "Completed \"${inventoryCommandPreview}\""
         fi
 
     else
