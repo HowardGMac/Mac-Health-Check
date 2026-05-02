@@ -1,12 +1,12 @@
 # Mac Health Check: Health Check Reference
 
-This text-only reference documents the key configurable defaults and runtime inventory for Mac Health Check `4.0.0b21`. No diagram is included; use [03-health-check-categories.md](03-health-check-categories.md) for a visual overview.
+This text-only reference documents the key configurable defaults and runtime inventory for Mac Health Check `4.0.0b23`. No diagram is included; use [03-health-check-categories.md](03-health-check-categories.md) for a visual overview.
 
 ---
 
-## 4.0.0b21 Runtime Notes
+## 4.0.0b23 Runtime Notes
 
-- `operationMode` is documented for the `4.0.0b21` release as `Self Service` by default, with `Silent`, `Debug`, `Development`, and `Test` also supported.
+- `operationMode` is documented for the `4.0.0b23` release as `Self Service` by default, with `Silent`, `Debug`, `Development`, and `Test` also supported.
 - `Self Service` and full `Silent` health-check runs now generate readable inspect-summary assets after the canonical report is written. `Self Service` launches a detached moveable swiftDialog Inspect Mode Preset 6 guided summary, separates recorded results into `Unhealthy` and `Healthy` sections, and retains the normal main-dialog completion countdown during full runs; `Silent` writes the assets without launching swiftDialog.
 - Re-running in `Self Service` can replay the cached inspect summary after pre-flight and Client-Side Cache installation when the handoff assets are still valid and younger than `inspectReplayMaximumAgeSeconds`.
 - `Development` mode currently runs only `checkWiFiStrength()` instead of the full vendor-specific suite.
@@ -80,7 +80,7 @@ The support/help experience uses both legacy support fields and dynamic `support
 | `supportLabel1`–`supportLabel6` | Mixed defaults / blanks | Dynamic support labels shown in the help message |
 | `supportValue1`–`supportValue6` | Mixed defaults / blanks | Matching dynamic support values; empty pairs are skipped |
 
-**4.0.0b21 behavior notes**
+**4.0.0b23 behavior notes**
 
 - If all `supportLabelN` / `supportValueN` pairs are blank, the script falls back to the legacy `supportTeam*` and KB values.
 - The first URL-like `supportValueN` becomes the Info button action in the dialog.
