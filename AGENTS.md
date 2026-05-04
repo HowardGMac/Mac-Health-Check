@@ -4,6 +4,9 @@
 This file takes precedence over `README.md`, `CLAUDE.md`, or any other instruction file.  
 For Claude Code users: symlink with `ln -s AGENTS.md CLAUDE.md` or reference via `@AGENTS.md` in a minimal `CLAUDE.md`.
 
+## Orchestration Contract
+This `AGENTS.md` is the codified contract that turns prompting into orchestration. It encodes project-specific rules, boundaries, repeatable skills, and deterministic workflows so every agent session starts with the same expectations. Per the Golden Rule of Constraints: if the same correction is needed more than once, formalize it here rather than repeating it in prompts.
+
 ## Project Overview
 macOS health & compliance reporting tool. Primary artifact: `Mac-Health-Check.zsh` (zsh + swiftDialog). MDM-agnostic with optional Jamf integration. Supports five operation modes: **Self Service** (default production), **Silent**, **Debug**, **Development**, and **Test**.
 
@@ -14,13 +17,38 @@ macOS health & compliance reporting tool. Primary artifact: `Mac-Health-Check.zs
 - View canonical version: `cat VERSION.txt`
 
 ## Agent Workflow
-- **Always** start non-trivial changes in Plan mode (or equivalent) before writing code.
+- **Always** start non-trivial changes in Plan mode (or equivalent) before writing code. Treat context like a scalpel, not a net — provide only the files, line ranges, or examples necessary for the task.
 - **In Plan Mode**: Do **not** make any changes (or even propose code) until you have reached **95% confidence** in the complete solution. Ask follow-up questions until you achieve that confidence level.
+- Default user-facing communication mode is `$caveman full` unless security, irreversible actions, or user confusion require temporary plain-language clarity.
 - Use **surgical, minimal edits** — reference exact function names, line ranges, or list-item IDs rather than pasting large sections of code or the entire script.
 - After any edit to `Mac-Health-Check.zsh`, immediately run `zsh -n` and then validate across all affected modes.
 - Before starting a session, confirm this `AGENTS.md` is loaded (use your agent's context or introspection command, or equivalent).
 - Prefer batching related changes into a single, well-scoped prompt when possible.
 - Never introduce debug-only or development-only behavior into production paths (`Self Service` or `Silent`).
+- Leverage codified **Skills** (see below) for repeatable workflows instead of re-describing the process each time.
+
+## Skills (Repeatable Workflows)
+These codified skills enforce consistent, deterministic processes. Invoke the relevant skill name in your planning prompt.
+
+### Add New Health Check Skill
+1. Plan the check using the exact template from a nearby check (humanReadableCheckName, dialogUpdate calls, logging, success/fail paths).
+2. Implement only in `Mac-Health-Check.zsh`.
+3. Update both the primary Self Service dialog JSON **and** the Development-mode subset.
+4. Run full validation in all five modes (`Self Service`, `Silent`, `Debug`, `Development`, `Test`).
+5. Document the new check in `README.md` and `CHANGELOG.md`.
+
+### Refactoring / Style Update Skill
+1. Identify every location that must change (use grep or equivalent).
+2. Make the minimal surgical edit only.
+3. Run `zsh -n` immediately after edit.
+4. Validate across all affected modes.
+5. Never leak Debug/Development behavior into production paths.
+
+### Release Preparation Skill
+1. Confirm `scriptVersion`, `VERSION.txt`, and `CHANGELOG.md` are aligned.
+2. Update only the files explicitly in scope.
+3. Run full regression across all five modes.
+4. Never modify `Resources/` artifacts unless the task is a packaging refresh.
 
 ## Boundaries
 
@@ -97,6 +125,8 @@ Mac Health Check should provide clear, actionable device health and compliance i
 - Do not add new production dependencies without explicit user confirmation.
 
 ## Scripting Style (Required)
+These rules exist to eliminate ambiguity and enforce determinism — they take precedence over any ad-hoc prompting.
+
 Maintain the established style of `Mac-Health-Check.zsh` unless the user explicitly asks for a different style.
 
 1. Keep the sectioned structure and visual separators (`####################################################################################################` and `# # # ...`) for major script regions.
@@ -105,6 +135,7 @@ Maintain the established style of `Mac-Health-Check.zsh` unless the user explici
 4. Prefer `"${var}"` style expansion and explicit quoting consistent with existing script patterns.
 5. Route operational logging through helper wrappers (`preFlight`, `notice`, `info`, `warning`, `errorOut`, `fatal`) instead of ad-hoc logging.
 6. **Preserve the established health-check lifecycle** (critical):
+
    ```zsh
    function checkXxx() {
        humanReadableCheckName="Human Readable Name"
