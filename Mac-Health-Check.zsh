@@ -3166,6 +3166,23 @@ function getInspectResultsTimestampText() {
 
 }
 
+function getInspectTimestampAndReplayMessage() {
+
+    local inspectDisplayTimestamp=""
+    local replayMinutes=$(( inspectReplayMaximumAgeSeconds / 60 ))
+
+    if [[ -n "${reportTimestamp}" ]]; then
+        inspectDisplayTimestamp="$( formatInspectTimestampForDisplay "${reportTimestamp}" )"
+    else
+        inspectDisplayTimestamp="$( date '+%A, %B %d at %I:%M %p %Z' )"
+    fi
+
+    echo "Results as of: **${inspectDisplayTimestamp}**.
+
+These cached results may be reused for up to ${replayMinutes} minutes."
+
+}
+
 function getInspectUnhealthyCount() {
 
     echo $(( ${#reportWarningChecks[@]} + ${#reportFailChecks[@]} + ${#reportErrorChecks[@]} ))
@@ -3922,19 +3939,9 @@ function buildInspectSummaryComparisonTableJSON() {
 function buildInspectOverviewGuidanceContentJSON() {
 
     printf '%s' "["
-    printf '%s' "{\"content\":$( jsonString "$( getInspectReplayExpirationMessage )" ),\"type\":\"info\"},"
-    if inspectUnhealthyResultsExist; then
-        printf '%s' "{\"content\":$( jsonString "$( getInspectIntroductionText )" ),\"type\":\"warning\"},"
-    else
-        printf '%s' "{\"content\":$( jsonString "$( getInspectIntroductionText )" ),\"type\":\"text\"},"
-    fi
+    printf '%s' "{\"content\":$( jsonString "$( getInspectTimestampAndReplayMessage )" ),\"type\":\"info\"},"
     printf '%s' "{\"type\":\"compliance-summary\",\"label\":\"Overall Compliance Status\"},"
-    printf '%s' "{\"type\":\"findings-list\"},"
-    printf '%s' "$( buildInspectSummaryComparisonTableJSON )"
-    if inspectUnhealthyResultsExist; then
-        printf '%s' ",{\"content\":\"Quick Actions Recommended\",\"type\":\"warning\"}"
-        printf '%s' ",{\"items\":$( buildInspectQuickActionsJSON ),\"type\":\"bullets\"}"
-    fi
+    printf '%s' "{\"type\":\"findings-list\"}"
     printf '%s' "]"
 
 }
@@ -4028,7 +4035,9 @@ function getInspectReplayExpirationMessage() {
 
 function getInspectNextStepsText() {
 
-    echo "Click **Finish** to close this report. $( getInspectReplayExpirationMessage )"
+    echo "Click **Finish** to close this report.
+
+$( getInspectTimestampAndReplayMessage )"
 
 }
 
@@ -4220,35 +4229,35 @@ function buildInspectItemsJSONArray() {
     separator=","
 
     if inspectUnhealthyResultsExist; then
-        printf '%s' "${separator}{\"displayName\":\"Remediation Guide\",\"guidanceContent\":$( buildInspectRemediationGuideGuidanceContentJSON ),\"guidanceTitle\":\"How to Fix Issues\",\"icon\":\"SF=wrench.and.screwdriver.fill\",\"id\":\"remediation\",\"stepType\":\"info\"}"
+        printf '%s' "${separator}{\"displayName\":\"Remediation Guide\",\"guidanceContent\":$( buildInspectRemediationGuideGuidanceContentJSON ),\"guidanceTitle\":\"How to Fix Issues\",\"icon\":$( jsonString "${sectionIcon}" ),\"id\":\"remediation\",\"stepType\":\"info\"}"
         separator=","
     fi
 
-    categoryItemJSON="$( buildInspectCategoryItemJSON "Security" "Security" "SF=lock.shield.fill" )"
+    categoryItemJSON="$( buildInspectCategoryItemJSON "Security" "Security" "${sectionIcon}" )"
     if [[ -n "${categoryItemJSON}" ]]; then
         printf '%s' "${separator}${categoryItemJSON}"
         separator=","
     fi
 
-    categoryItemJSON="$( buildInspectCategoryItemJSON "Maintenance" "Maintenance" "SF=wrench.and.screwdriver.fill" )"
+    categoryItemJSON="$( buildInspectCategoryItemJSON "Maintenance" "Maintenance" "${sectionIcon}" )"
     if [[ -n "${categoryItemJSON}" ]]; then
         printf '%s' "${separator}${categoryItemJSON}"
         separator=","
     fi
 
-    categoryItemJSON="$( buildInspectCategoryItemJSON "MDM" "MDM & Inventory" "SF=desktopcomputer.badge.checkmark" )"
+    categoryItemJSON="$( buildInspectCategoryItemJSON "MDM" "MDM & Inventory" "${sectionIcon}" )"
     if [[ -n "${categoryItemJSON}" ]]; then
         printf '%s' "${separator}${categoryItemJSON}"
         separator=","
     fi
 
-    categoryItemJSON="$( buildInspectCategoryItemJSON "Connectivity" "Connectivity" "SF=wifi" )"
+    categoryItemJSON="$( buildInspectCategoryItemJSON "Connectivity" "Connectivity" "${sectionIcon}" )"
     if [[ -n "${categoryItemJSON}" ]]; then
         printf '%s' "${separator}${categoryItemJSON}"
         separator=","
     fi
 
-    categoryItemJSON="$( buildInspectCategoryItemJSON "Applications" "Applications" "SF=square.grid.2x2.fill" )"
+    categoryItemJSON="$( buildInspectCategoryItemJSON "Applications" "Applications" "${sectionIcon}" )"
     if [[ -n "${categoryItemJSON}" ]]; then
         printf '%s' "${separator}${categoryItemJSON}"
         separator=","

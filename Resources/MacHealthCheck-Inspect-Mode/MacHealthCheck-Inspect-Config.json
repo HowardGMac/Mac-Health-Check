@@ -241,12 +241,8 @@
       "stepType": "info",
       "guidanceContent": [
         {
-          "content": "These cached results may be reused for up to 15 minutes.",
+          "content": "Results as of: **Thursday, May 08 at 10:24 AM EDT**.\n\nThese cached results may be reused for up to 15 minutes.",
           "type": "info"
-        },
-        {
-          "content": "Your recent Mac Health Check results are ready to review. **4 checks need attention**.",
-          "type": "warning"
         },
         {
           "type": "compliance-summary",
@@ -254,39 +250,13 @@
         },
         {
           "type": "findings-list"
-        },
-        {
-          "content": "Results as of: Thursday, May 08 at 10:24 AM EDT",
-          "comparisonStyle": "columns",
-          "expectedLabel": "Healthy",
-          "expected": "35 checks passed",
-          "expectedColor": "#34C759",
-          "expectedIcon": "checkmark.shield",
-          "actualLabel": "Unhealthy",
-          "actual": "4 checks need attention",
-          "actualColor": "#EB4C46",
-          "actualIcon": "xmark.circle.fill",
-          "type": "comparison-table"
-        },
-        {
-          "content": "Quick Actions Recommended",
-          "type": "warning"
-        },
-        {
-          "items": [
-            "Update macOS to supported release.",
-            "Change AirDrop to No One or Contacts Only.",
-            "Reduce Downloads folder usage.",
-            "Run App Auto-Patch and update installed apps."
-          ],
-          "type": "bullets"
         }
       ]
     },
     {
       "displayName": "Remediation Guide",
       "guidanceTitle": "How to Fix Issues",
-      "icon": "SF=wrench.and.screwdriver.fill",
+      "icon": "https://usw2.ics.services.jamfcloud.com/icon/hash_08f287b1d7a9da36b733c0784031a4943bef3b82a2981eb937ab2f5b2bd55e91",
       "id": "remediation",
       "stepType": "info",
       "guidanceContent": [
@@ -351,7 +321,7 @@
     {
       "displayName": "Security",
       "guidanceTitle": "Security Status",
-      "icon": "SF=lock.shield.fill",
+      "icon": "https://usw2.ics.services.jamfcloud.com/icon/hash_08f287b1d7a9da36b733c0784031a4943bef3b82a2981eb937ab2f5b2bd55e91",
       "id": "security",
       "stepType": "info",
       "guidanceContent": [
@@ -484,7 +454,7 @@
     {
       "displayName": "Maintenance",
       "guidanceTitle": "Maintenance Status",
-      "icon": "SF=wrench.and.screwdriver.fill",
+      "icon": "https://usw2.ics.services.jamfcloud.com/icon/hash_08f287b1d7a9da36b733c0784031a4943bef3b82a2981eb937ab2f5b2bd55e91",
       "id": "maintenance",
       "stepType": "info",
       "guidanceContent": [
@@ -756,7 +726,7 @@
         }
       ],
       "guidanceTitle": "MDM & Inventory Status",
-      "icon": "SF=desktopcomputer.badge.checkmark",
+      "icon": "https://usw2.ics.services.jamfcloud.com/icon/hash_08f287b1d7a9da36b733c0784031a4943bef3b82a2981eb937ab2f5b2bd55e91",
       "id": "mdm__inventory",
       "stepType": "info"
     },
@@ -876,7 +846,7 @@
         }
       ],
       "guidanceTitle": "Connectivity Status",
-      "icon": "SF=wifi",
+      "icon": "https://usw2.ics.services.jamfcloud.com/icon/hash_08f287b1d7a9da36b733c0784031a4943bef3b82a2981eb937ab2f5b2bd55e91",
       "id": "connectivity",
       "stepType": "info"
     },
@@ -931,7 +901,7 @@
         }
       ],
       "guidanceTitle": "Applications Status",
-      "icon": "SF=square.grid.2x2.fill",
+      "icon": "https://usw2.ics.services.jamfcloud.com/icon/hash_08f287b1d7a9da36b733c0784031a4943bef3b82a2981eb937ab2f5b2bd55e91",
       "id": "applications",
       "stepType": "info"
     },
@@ -1061,7 +1031,7 @@
           "type": "phase-tracker"
         },
         {
-          "content": "Click **Finish** to close this report.",
+          "content": "Click **Finish** to close this report.\n\nResults as of: **Thursday, May 08 at 10:24 AM EDT**.\n\nThese cached results may be reused for up to 15 minutes.",
           "type": "info"
         },
         {
