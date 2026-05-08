@@ -2,13 +2,13 @@
 
 ## CHANGELOG
 
-### 4.0.0b23 (29-Apr-2026)
+### 4.0.0b24 (08-May-2026)
+- Raised the minimum required swiftDialog version to `3.1.0.4979`
 - Added JSON health reporting (with optional Splunk HTTP Event Collector (HEC) delivery)
 - Added a stand-alone swiftDialog Inspect Mode-flavored report (i.e., `inspectSummaryPreset="on"`), plus cached replay (i.e., `inspectReplayMaximumAgeSeconds`) for `Self Service` runs
 - Refactored full `Silent` health-check runs to write `/var/tmp/MacHealthCheck-Inspect-Config.json` and `/var/tmp/MacHealthCheck-Inspect-Compliance.plist` without launching swiftDialog
 - Refactored `checkElectronCornerMask` to reduce execution time
 - Many quality-of-life user-interface improvements
-- Raised the minimum required swiftDialog version to `3.1.0.4976`
 - Refactored `checkHomebrewStatus()` to more accurately reflect Homebrew's actual installation status
 - Added "Next Steps" to Inspect Mode-flavored report
 - Added `checkWiFiStrength()`; thanks, @kgolden-code!
@@ -33,11 +33,11 @@
 - Added a live compliance plist source for `compliance-summary`, `findings-list` and bento-grid `BentoPlistDetailSheet` popovers
 - Added Inspect Mode trigger, readiness and result control file paths to generated Preset 6 configs
 - Updated the Preset 6 demo resources to use source-level labels and cell IDs that bind directly to plist keys
-- Raised the minimum required swiftDialog version to `3.1.0.4977`
 - Refactored swiftDialog pre-flight updates to skip redundant production package downloads when the installed release already matches the latest production build
 - Improved external-check result parsing, logging and client-side cache installs
 - Refactored `updateComputerInventory()` to show an end-user warning state when `jamf recon` fails instead of always reporting success
 - Added a `90`-second timeout for `jamf recon` during `updateComputerInventory()`, with timeout-specific logging and end-user messaging
+- Maximized swiftDialog Inspect Mode Preset 6 with `Quick Actions`, a conditional `Remediation Guide`, status-aware bento-grid cards, and a stronger unhealthy-results hierarchy
 
 ### 3.0.0 (23-Feb-2026)
 **First (attempt at a) MDM-agnostic release**

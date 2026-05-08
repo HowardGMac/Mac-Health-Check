@@ -17,36 +17,8 @@
 #
 # HISTORY
 #
-# Version 4.0.0b23, 29-Apr-2026, Dan K. Snelson (@dan-snelson)
-# - Added JSON health reporting (with optional Splunk HTTP Event Collector (HEC) delivery)
-# - Added a stand-alone swiftDialog Inspect Mode-flavored report (i.e., `inspectSummaryPreset="on"`), plus cached replay (i.e., `inspectReplayMaximumAgeSeconds`) for `Self Service` runs
-# - Refactored `checkElectronCornerMask` to reduce execution time
-# - Many quality-of-life user-interface improvements
-# - Raised the minimum required swiftDialog version to `3.1.0.4976`
-# - Refactored `checkHomebrewStatus()` to more accurately reflect Homebrew's actual installation status
-# - Added "Next Steps" to Inspect Mode-flavored report
-# - Added `checkWiFiStrength()`; thanks, @kgolden-code!
-# - Removed `displayFailureNotification()` in favor of the Inspect Mode-flavored report
-# - Refactored `Silent` when used with `splunkOperationMode=production` to suppress non-Splunk console output and return success when Splunk reporting succeeds, regardless of recorded health findings
-# - Refactored Palo Alto GlobalProtect-related code (inspired by @kgolden-code’s PR #88) to add support for connected-non-pa status, safe plist reads and normalized external-check output
-# - Refactored the final standard dialog to distinguish warning-only results from failures, showing `Computer Needs Attention` with an amber exclamation mark and returning exit code `0` when no checks failed
-# - Update Free Disk Space and (Folder) Size and Item Count reporting Info (thanks for PR #89, @HowardGMac!)
-# - Enhanced Wi-Fi Strength test reporting (thanks for PR #90, @HowardGMac!)"
-# - Added Client-Side Cache nightly cache generation and Jamf Pro cached Splunk upload optimization
-# - Added LaunchDaemon deployment for a local daily `Silent` report refresh with deterministic per-Mac jitter around 1:23 a.m.
-# - Sanitized the client-side script copy so it does not perform Jamf inventory submission
-# - Fixed duplicate prefixed `Silent` log lines from LaunchDaemon runs by making MHC logging the only writer to `scriptLog`
-# - Fixed truncated command-preview log entries from user-context helpers by joining command arguments before logging
-# - Normalized client-side cache, LaunchDaemon, and Jamf external-check helper output so field logs stay MHC-prefixed
-# - Tightened cached-report validation and reporting state for cached Splunk uploads
-# - Updated the detached swiftDialog Inspect Mode Preset 6 report for swiftDialog `3.1.0.4977` compliance findings
-# - Added plist-backed `compliance-summary`, `findings-list` and live-bound bento-grid sections to the Inspect Mode report
-# - Added Inspect Mode trigger, readiness, result and compliance plist control files for more reliable inspect workflows
-# - Refactored swiftDialog pre-flight updates to skip redundant production package downloads when the installed release already matches the latest production build
-# - Refactored Silent full health-check runs to generate Inspect Mode config assets without launching swiftDialog
-# - Improved external-check result parsing, logging and client-side cache installs
-# - Refactored `updateComputerInventory()` to show an end-user warning state when `jamf recon` fails instead of always reporting success
-# - Added a `90`-second timeout for `jamf recon` during `updateComputerInventory()`, with timeout-specific logging and end-user messaging
+# Version 4.0.0b24, 08-May-2026, Dan K. Snelson (@dan-snelson)
+# - See CHANGELOG.md for details
 #
 ####################################################################################################
 
@@ -61,7 +33,7 @@
 export PATH=/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin/
 
 # Script Version
-scriptVersion="4.0.0b23"
+scriptVersion="4.0.0b24"
 
 # Client-side Log
 scriptLog="/var/log/org.churchofjesuschrist.log"
@@ -70,7 +42,7 @@ scriptLog="/var/log/org.churchofjesuschrist.log"
 autoload -Uz is-at-least
 
 # Minimum Required Version of swiftDialog
-swiftDialogMinimumRequiredVersion="3.1.0.4977"
+swiftDialogMinimumRequiredVersion="3.1.0.4979"
 
 # Force locale to English (so `date` does not error on localization formatting)
 LANG="en_us_88591"
@@ -3200,6 +3172,18 @@ function getInspectUnhealthyCount() {
 
 }
 
+function buildInspectUnhealthyTitleArray() {
+
+    local unhealthyTitles=()
+
+    unhealthyTitles+=( "${reportErrorChecks[@]}" )
+    unhealthyTitles+=( "${reportFailChecks[@]}" )
+    unhealthyTitles+=( "${reportWarningChecks[@]}" )
+
+    printf '%s\n' "${unhealthyTitles[@]}"
+
+}
+
 function getInspectResultsSummaryText() {
 
     local healthyCount="${#reportHealthyChecks[@]}"
@@ -3228,6 +3212,26 @@ function getInspectHealthyResultsSummaryText() {
     local healthyCount="${#reportHealthyChecks[@]}"
 
     echo "${healthyCount} checks completed successfully and remain compliant."
+
+}
+
+function getInspectProblemTextByIndex() {
+
+    local index="${1}"
+    local message="${checkMessageByIndex[${index}]}"
+    local normalizedStatus="${checkNormalizedStatusByIndex[${index}]}"
+    local actualText="$( getInspectComparisonActualTextByIndex "${index}" )"
+    local rawValue="${checkStatustextByIndex[${index}]}"
+
+    if [[ -n "${message}" ]] && [[ "${message}" != "${organizationBoilerplateComplianceMessage}" ]]; then
+        echo "${message}"
+    elif [[ "${normalizedStatus}" != "healthy" ]] && [[ -n "${actualText}" ]]; then
+        echo "${actualText}"
+    elif [[ -n "${rawValue}" ]]; then
+        echo "${rawValue}"
+    else
+        echo "Result unavailable"
+    fi
 
 }
 
@@ -3365,6 +3369,35 @@ function getInspectExpectedComparisonTextByIndex() {
 
 }
 
+function getInspectSupportFallbackText() {
+
+    if [[ -n "${supportButtonText}" ]] && [[ -n "${supportButtonAction}" ]]; then
+        echo "If issue persists, use ${supportButtonText} (${supportButtonAction})."
+    elif [[ -n "${supportTeamEmail}" ]]; then
+        echo "If issue persists, contact ${supportTeamName} at ${supportTeamEmail}."
+    elif [[ -n "${supportTeamPhone}" ]]; then
+        echo "If issue persists, contact ${supportTeamName} at ${supportTeamPhone}."
+    elif [[ -n "${supportTeamWebsite}" ]]; then
+        echo "If issue persists, review ${supportTeamWebsite}."
+    else
+        echo "If issue persists, contact ${supportTeamName}."
+    fi
+
+}
+
+function getInspectRemediationTextByIndex() {
+
+    local index="${1}"
+    local remediation="${checkRemediationByIndex[${index}]}"
+
+    if [[ -n "${remediation}" ]] && [[ "${remediation}" != "${organizationBoilerplateComplianceMessage}" ]]; then
+        echo "${remediation}"
+    else
+        echo "$( getInspectExpectedComparisonTextByIndex "${index}" ). $( getInspectSupportFallbackText )"
+    fi
+
+}
+
 function getInspectComparisonActualTextByIndex() {
 
     local index="${1}"
@@ -3393,6 +3426,25 @@ function getInspectStatusColor() {
             ;;
         * )
             echo "#8E8E93"
+            ;;
+    esac
+
+}
+
+function getInspectBentoBackgroundColor() {
+
+    case "${1}" in
+        "healthy" )
+            echo "#1D2C22"
+            ;;
+        "warning" )
+            echo "#4A3510"
+            ;;
+        "fail" | "error" )
+            echo "#4A1F1F"
+            ;;
+        * )
+            echo "#30343A"
             ;;
     esac
 
@@ -3716,7 +3768,7 @@ function buildInspectBentoCellsJSONForCategory() {
             printf '%s' "\"iconWeight\":\"semibold\","
             printf '%s' "\"textSize\":\"small\","
             printf '%s' "\"textColor\":\"#FFFFFF\","
-            printf '%s' "\"backgroundColor\":\"#1D2C22\""
+            printf '%s' "\"backgroundColor\":$( jsonString "$( getInspectBentoBackgroundColor "${checkNormalizedStatusByIndex[${i}]}" )" )"
             printf '%s' "}"
             separator=","
             (( cellCount++ ))
@@ -3787,6 +3839,65 @@ function buildInspectComparisonEntriesJSONFromTitles() {
 
 }
 
+function getInspectQuickActionTextByIndex() {
+
+    local index="${1}"
+    local title="${checkTitleByIndex[${index}]}"
+    local remediation="$( getInspectRemediationTextByIndex "${index}" )"
+    local normalizedStatus="${checkNormalizedStatusByIndex[${index}]}"
+
+    case "${title}" in
+        "macOS Version" )
+            echo "Update macOS to supported release."
+            ;;
+        "Available Updates" )
+            echo "Install available software updates."
+            ;;
+        "AirDrop" )
+            echo "Change AirDrop to No One or Contacts Only."
+            ;;
+        "Downloads Size and Item Count" )
+            echo "Reduce Downloads folder usage."
+            ;;
+        "Desktop Size and Item Count" )
+            echo "Reduce Desktop folder usage."
+            ;;
+        "Trash Size and Item Count" )
+            echo "Empty Trash or remove unneeded files."
+            ;;
+        "App Auto-Patch" )
+            echo "Run App Auto-Patch and update installed apps."
+            ;;
+        * )
+            if [[ "${normalizedStatus}" == "warning" ]]; then
+                echo "${title}: ${remediation}"
+            else
+                echo "${title}: ${remediation}"
+            fi
+            ;;
+    esac
+
+}
+
+function buildInspectQuickActionsJSON() {
+
+    local unhealthyTitles=( "${(@f)$( buildInspectUnhealthyTitleArray )}" )
+    local quickActions=()
+    local title=""
+    local index=""
+
+    for title in "${unhealthyTitles[@]}"; do
+        index="${checkIndexByTitle[${title}]}"
+        if [[ "${index}" == <-> ]]; then
+            quickActions+=( "$( getInspectQuickActionTextByIndex "${index}" )" )
+        fi
+        (( ${#quickActions[@]} >= 5 )) && break
+    done
+
+    buildJSONStringArray "${quickActions[@]}"
+
+}
+
 function buildInspectSummaryComparisonTableJSON() {
 
     local healthyCount="${#reportHealthyChecks[@]}"
@@ -3812,9 +3923,18 @@ function buildInspectOverviewGuidanceContentJSON() {
 
     printf '%s' "["
     printf '%s' "{\"content\":$( jsonString "$( getInspectReplayExpirationMessage )" ),\"type\":\"info\"},"
-    printf '%s' "{\"content\":$( jsonString "$( getInspectIntroductionText )" ),\"type\":\"text\"},"
+    if inspectUnhealthyResultsExist; then
+        printf '%s' "{\"content\":$( jsonString "$( getInspectIntroductionText )" ),\"type\":\"warning\"},"
+    else
+        printf '%s' "{\"content\":$( jsonString "$( getInspectIntroductionText )" ),\"type\":\"text\"},"
+    fi
     printf '%s' "{\"type\":\"compliance-summary\",\"label\":\"Overall Compliance Status\"},"
-    printf '%s' "{\"type\":\"findings-list\"}"
+    printf '%s' "{\"type\":\"findings-list\"},"
+    printf '%s' "$( buildInspectSummaryComparisonTableJSON )"
+    if inspectUnhealthyResultsExist; then
+        printf '%s' ",{\"content\":\"Quick Actions Recommended\",\"type\":\"warning\"}"
+        printf '%s' ",{\"items\":$( buildInspectQuickActionsJSON ),\"type\":\"bullets\"}"
+    fi
     printf '%s' "]"
 
 }
@@ -3941,9 +4061,7 @@ function buildInspectUnhealthyResultsGuidanceContentJSON() {
     local unhealthyResultTitles=()
     local comparisonEntriesJSON=""
 
-    unhealthyResultTitles+=( "${reportErrorChecks[@]}" )
-    unhealthyResultTitles+=( "${reportFailChecks[@]}" )
-    unhealthyResultTitles+=( "${reportWarningChecks[@]}" )
+    unhealthyResultTitles=( "${(@f)$( buildInspectUnhealthyTitleArray )}" )
     comparisonEntriesJSON="$( buildInspectComparisonEntriesJSONFromTitles "${unhealthyResultTitles[@]}" )"
 
     printf '%s' "["
@@ -3951,6 +4069,41 @@ function buildInspectUnhealthyResultsGuidanceContentJSON() {
     if [[ -n "${comparisonEntriesJSON}" ]]; then
         printf '%s' ",${comparisonEntriesJSON}"
     fi
+    printf '%s' "]"
+
+}
+
+function buildInspectRemediationGuideGuidanceContentJSON() {
+
+    local unhealthyResultTitles=( "${(@f)$( buildInspectUnhealthyTitleArray )}" )
+    local title=""
+    local index=""
+    local normalizedStatus=""
+
+    printf '%s' "["
+    printf '%s' "{\"content\":$( jsonString "$( getInspectUnhealthyResultsSummaryText )" ),\"type\":\"warning\"}"
+    printf '%s' ",{\"content\":\"Address failures first, then warnings to restore full compliance.\",\"type\":\"info\"}"
+
+    for title in "${unhealthyResultTitles[@]}"; do
+        index="${checkIndexByTitle[${title}]}"
+        if [[ "${index}" == <-> ]]; then
+            normalizedStatus="${checkNormalizedStatusByIndex[${index}]}"
+            printf '%s' ",{"
+            printf '%s' "\"content\":$( jsonString "${title}" ),"
+            printf '%s' "\"comparisonStyle\":\"columns\","
+            printf '%s' "\"expectedLabel\":\"Problem\","
+            printf '%s' "\"expected\":$( jsonString "$( getInspectProblemTextByIndex "${index}" )" ),"
+            printf '%s' "\"expectedColor\":$( jsonString "$( getInspectStatusColor "${normalizedStatus}" )" ),"
+            printf '%s' "\"expectedIcon\":$( jsonString "$( getInspectStatusIcon "${normalizedStatus}" )" ),"
+            printf '%s' "\"actualLabel\":\"What to do\","
+            printf '%s' "\"actual\":$( jsonString "$( getInspectRemediationTextByIndex "${index}" )" ),"
+            printf '%s' "\"actualColor\":\"#34C759\","
+            printf '%s' "\"actualIcon\":$( jsonString "$( getInspectCheckSymbolByIndex "${index}" )" ),"
+            printf '%s' "\"type\":\"comparison-table\""
+            printf '%s' "}"
+        fi
+    done
+
     printf '%s' "]"
 
 }
@@ -4065,6 +4218,11 @@ function buildInspectItemsJSONArray() {
     printf '%s' "["
     printf '%s' "{\"displayName\":\"Overview\",\"guidanceContent\":$( buildInspectIntroductionGuidanceContentJSON ),\"guidanceTitle\":\"Results Overview\",\"icon\":$( jsonString "${sectionIcon}" ),\"id\":\"overview\",\"stepType\":\"info\"}"
     separator=","
+
+    if inspectUnhealthyResultsExist; then
+        printf '%s' "${separator}{\"displayName\":\"Remediation Guide\",\"guidanceContent\":$( buildInspectRemediationGuideGuidanceContentJSON ),\"guidanceTitle\":\"How to Fix Issues\",\"icon\":\"SF=wrench.and.screwdriver.fill\",\"id\":\"remediation\",\"stepType\":\"info\"}"
+        separator=","
+    fi
 
     categoryItemJSON="$( buildInspectCategoryItemJSON "Security" "Security" "SF=lock.shield.fill" )"
     if [[ -n "${categoryItemJSON}" ]]; then
