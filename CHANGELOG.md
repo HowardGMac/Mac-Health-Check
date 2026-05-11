@@ -2,7 +2,7 @@
 
 ## CHANGELOG
 
-### 4.0.0b24 (08-May-2026)
+### 4.0.0b25 (09-May-2026)
 - Raised the minimum required swiftDialog version to `3.1.0.4979`
 - Added JSON health reporting (with optional Splunk HTTP Event Collector (HEC) delivery)
 - Added a stand-alone swiftDialog Inspect Mode-flavored report (i.e., `inspectSummaryPreset="on"`), plus cached replay (i.e., `inspectReplayMaximumAgeSeconds`) for `Self Service` runs
@@ -29,7 +29,7 @@
 - Fixed truncated `Run` command-preview log entries by joining and quoting command arguments before logging user-context helper invocations
 - Normalized client-side cache, LaunchDaemon validation/loading, and Jamf external-check helper output so field logs stay MHC-prefixed
 - Tightened cached-report validation and cached Splunk upload state so cached upload failures no longer look like successful report generation
-- Updated the detached swiftDialog Inspect Mode Preset 6 report for swiftDialog `3.1.0.4977` compliance findings
+- Updated the detached swiftDialog Inspect Mode Preset 6 report for swiftDialog `3.1.0.4979` compliance findings
 - Added a live compliance plist source for `compliance-summary`, `findings-list` and bento-grid `BentoPlistDetailSheet` popovers
 - Added Inspect Mode trigger, readiness and result control file paths to generated Preset 6 configs
 - Updated the Preset 6 demo resources to use source-level labels and cell IDs that bind directly to plist keys
@@ -38,6 +38,7 @@
 - Refactored `updateComputerInventory()` to show an end-user warning state when `jamf recon` fails instead of always reporting success
 - Added a `90`-second timeout for `jamf recon` during `updateComputerInventory()`, with timeout-specific logging and end-user messaging
 - Maximized swiftDialog Inspect Mode Preset 6 with `Quick Actions`, a conditional `Remediation Guide`, status-aware bento-grid cards, and a stronger unhealthy-results hierarchy
+- Added `checkEntraIDRegistration()` function to Jamf Pro-specific checks and `identity.entraIDRegistration` in JSON reports and Inspect Mode summaries
 
 ### 3.0.0 (23-Feb-2026)
 **First (attempt at a) MDM-agnostic release**
